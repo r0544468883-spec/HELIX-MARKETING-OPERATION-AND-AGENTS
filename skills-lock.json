@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "product-spec-kit": {
+      "source": "diegoeis/product-spec-kit",
+      "sourceType": "github",
+      "computedHash": "1b5e75cb41bec52d4c1f477824508a363d942a546800c7f325ad76d189b9ba18"
+    }
+  }
+}
