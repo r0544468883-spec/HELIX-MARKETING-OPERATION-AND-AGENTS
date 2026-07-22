@@ -49,9 +49,16 @@ create table if not exists content_variants (
   clicks            int default 0,
   conversions       int default 0,
   is_winner         boolean default false,
+  published         boolean default false,             -- published to its channel?
+  published_at      timestamptz,
   created_at        timestamptz default now()
 );
 create index if not exists idx_variants_asset on content_variants(campaign_asset_id);
+
+-- Publish mode/media on the existing publications log (multi-variant, organic/paid/video).
+alter table publications add column if not exists mode      text default 'organic'; -- organic | paid | video
+alter table publications add column if not exists media_url text;
+alter table publications add column if not exists variant_id uuid;
 
 -- Map a bot chat (telegram chat id / whatsapp phone / email) to a workspace so
 -- every function is reachable from the bot with the right RLS scope.

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { generateChannelVariants } from '@/lib/content-agent';
 import { createCampaignShell, buildOneAsset, type CampaignInput } from '@/lib/campaign-run';
 import { sendToChannel } from '@/lib/distribution';
+import { publishPaid } from '@/lib/distribution/paid';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -73,10 +74,54 @@ export async function publishVariant(variantId: string) {
   const res = await sendToChannel(label, (conn?.config ?? {}) as Record<string, unknown>, v.body as string);
 
   await supabase.from('publications').insert({
-    workspace_id: ws, channel: label, content: v.body,
+    workspace_id: ws, channel: label, content: v.body, variant_id: variantId, mode: 'organic',
     status: res.ok ? 'sent' : 'failed', external_id: res.externalId ?? null, error: res.error ?? null, sent_at: res.ok ? new Date().toISOString() : null,
   });
   return res.ok ? { ok: true } : { error: res.error };
+}
+
+// Publish MULTIPLE variants at once — the A/B way. Each selected variant goes out
+// as its own post/creative. mode: 'organic' (content) | 'paid' (ממומן) | 'video'.
+// mediaUrl attaches a video (for 'video', and optionally 'paid'). Works per platform.
+export type PublishMode = 'organic' | 'paid' | 'video';
+export async function publishVariants(input: { variantIds: string[]; mode: PublishMode; mediaUrl?: string; budget?: number }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+  if (!input.variantIds.length) return { error: 'no_variants_selected' };
+  if (input.mode === 'video' && !input.mediaUrl) return { error: 'video_requires_media' };
+
+  const { data: variants } = await supabase.from('content_variants').select('id, channel, body').in('id', input.variantIds);
+  const results: { id: string; ok: boolean; error?: string }[] = [];
+
+  for (const v of variants ?? []) {
+    const label = PUBLISH_LABEL[v.channel as string];
+    if (!label) { results.push({ id: v.id as string, ok: false, error: 'channel_not_publishable' }); continue; }
+    const { data: conn } = await supabase.from('channel_connections').select('config').eq('workspace_id', ws).eq('channel', label).maybeSingle();
+    const baseConfig = (conn?.config ?? {}) as Record<string, unknown>;
+
+    let res;
+    if (input.mode === 'paid') {
+      res = await publishPaid(label, baseConfig, v.body as string, { budget: input.budget, mediaUrl: input.mediaUrl });
+    } else {
+      // organic content, or video (attach video_url the video adapters consume).
+      const config = input.mediaUrl ? { ...baseConfig, video_url: input.mediaUrl } : baseConfig;
+      res = await sendToChannel(label, config, v.body as string);
+    }
+
+    await supabase.from('publications').insert({
+      workspace_id: ws, channel: label, content: v.body, variant_id: v.id, mode: input.mode, media_url: input.mediaUrl ?? null,
+      status: res.ok ? 'sent' : 'failed', external_id: res.externalId ?? null, error: res.error ?? null, sent_at: res.ok ? new Date().toISOString() : null,
+    });
+    if (res.ok) await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString() }).eq('id', v.id);
+    results.push({ id: v.id as string, ok: res.ok, error: res.error });
+  }
+
+  revalidatePath('/campaigns');
+  const sent = results.filter((r) => r.ok).length;
+  return { ok: true, sent, failed: results.length - sent, results };
 }
 
 // Automatic A/B winner — pick by real performance if any exists (conversions>clicks>

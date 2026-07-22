@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { setVariantWinner, buildNextAsset, publishVariant, autoPickWinner } from '@/app/actions-campaigns';
+import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner } from '@/app/actions-campaigns';
 
 export type VariantRow = {
   id: string; campaign_asset_id: string; channel: string; angle: string | null;
-  angle_index: number; variation_index: number; body: string; ai_score: number; is_winner: boolean;
+  angle_index: number; variation_index: number; body: string; ai_score: number; is_winner: boolean; published?: boolean;
 };
 export type AssetRow = { id: string; channel: string; kind: string; budget: number | null; status?: string; payload: Record<string, unknown> };
 export type CampaignFull = { id: string; name: string; goal: string | null; brief: string | null; channels: string[] };
@@ -48,12 +48,6 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
       setNote(`נבחר מנצח אוטומטית (לפי ${res.basis === 'performance' ? 'ביצועים' : 'ציון אנושיות'}).`);
     }
   }
-  async function publish(assetId: string) {
-    const w = rows.find((x) => x.campaign_asset_id === assetId && x.is_winner);
-    if (!w) return setNote('בחר מנצח לפני פרסום.');
-    const res = await publishVariant(w.id);
-    setNote('error' in res && res.error ? 'שגיאת פרסום: ' + res.error : '✅ המנצח פורסם לערוץ.');
-  }
 
   return (
     <main className="max-w-[980px] mx-auto px-5 md:px-10 pt-8 pb-16" dir="rtl">
@@ -76,10 +70,7 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
               <div className="flex items-center gap-2">
                 {a.budget != null && <span className="text-[13px] font-semibold text-emerald-600">{money(a.budget)}</span>}
                 {a.kind === 'social' && a.status !== 'pending' && (
-                  <>
-                    <button onClick={() => auto(a.id)} className="text-[12px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-3 py-1.5">בחר מנצח אוטומטית</button>
-                    <button onClick={() => publish(a.id)} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5">פרסם מנצח</button>
-                  </>
+                  <button onClick={() => auto(a.id)} className="text-[12px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-3 py-1.5">בחר מנצח אוטומטית</button>
                 )}
               </div>
             </div>
@@ -99,12 +90,36 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
 }
 
 function SocialAsset({ variants, onWinner }: { assetId: string; variants: VariantRow[]; onWinner: (v: VariantRow) => void }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [mode, setMode] = useState<'organic' | 'paid' | 'video'>('organic');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [pubNote, setPubNote] = useState<string | null>(null);
+  const [pub, setPub] = useState<Set<string>>(new Set(variants.filter((v) => v.published).map((v) => v.id)));
+
+  function toggle(id: string) {
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function publishSelected() {
+    if (selected.size === 0) return setPubNote('בחר לפחות גרסה אחת.');
+    if (mode === 'video' && !mediaUrl.trim()) return setPubNote('מצב סרטון דורש קישור וידאו.');
+    setBusy(true); setPubNote(null);
+    const res = await publishVariants({ variantIds: [...selected], mode, mediaUrl: mediaUrl.trim() || undefined });
+    setBusy(false);
+    if ('error' in res && res.error) return setPubNote('שגיאה: ' + res.error);
+    setPub((p) => new Set([...p, ...[...selected]]));
+    setSelected(new Set());
+    setPubNote(`✅ פורסמו ${(res as { sent: number }).sent} גרסאות (${modeLabel(mode)}).`);
+  }
+
   // Group by angle_index.
   const byAngle = new Map<number, VariantRow[]>();
   for (const v of variants.sort((a, b) => a.variation_index - b.variation_index)) {
     const list = byAngle.get(v.angle_index) ?? [];
     list.push(v); byAngle.set(v.angle_index, list);
   }
+
   return (
     <div className="space-y-4">
       {[...byAngle.entries()].sort((a, b) => a[0] - b[0]).map(([ai, list]) => (
@@ -112,12 +127,15 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
           <div className="text-[13px] font-bold text-[var(--ink-secondary)] mb-2">סגנון {ai + 1}: {list[0]?.angle}</div>
           <div className="grid md:grid-cols-2 gap-2">
             {list.map((v) => (
-              <div key={v.id} className={`rounded-xl border p-3 ${v.is_winner ? 'border-emerald-500 bg-emerald-50/40' : 'border-black/10'}`}>
-                <div className="text-[13px] whitespace-pre-wrap mb-2">{v.body}</div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--ink-secondary)]">אנושיות: {v.ai_score}/100</span>
+              <div key={v.id} className={`rounded-xl border p-3 ${selected.has(v.id) ? 'border-emerald-500 ring-1 ring-emerald-300' : v.is_winner ? 'border-emerald-400 bg-emerald-50/40' : 'border-black/10'}`}>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" className="mt-1 accent-emerald-600" checked={selected.has(v.id)} onChange={() => toggle(v.id)} />
+                  <div className="text-[13px] whitespace-pre-wrap flex-1">{v.body}</div>
+                </label>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[11px] text-[var(--ink-secondary)]">אנושיות: {v.ai_score}/100 {pub.has(v.id) && <span className="text-emerald-600 font-bold">· פורסם ✓</span>}</span>
                   <button onClick={() => onWinner(v)} className={`text-[11px] font-bold rounded-lg px-2.5 py-1 ${v.is_winner ? 'bg-emerald-600 text-white' : 'bg-black/5 hover:bg-black/10'}`}>
-                    {v.is_winner ? '★ מנצח' : 'בחר מנצח'}
+                    {v.is_winner ? '★ מנצח' : 'סמן מנצח'}
                   </button>
                 </div>
               </div>
@@ -125,8 +143,29 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
           </div>
         </div>
       ))}
+
+      {/* Multi-variant publish bar — organic / paid / video, several at once */}
+      <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3 flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-bold">פרסום ({selected.size} נבחרו):</span>
+        <div className="flex gap-1">
+          {(['organic', 'paid', 'video'] as const).map((m) => (
+            <button key={m} onClick={() => setMode(m)} className={`text-[12px] font-semibold rounded-lg px-3 py-1.5 border ${mode === m ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-black/10 text-[var(--ink-secondary)]'}`}>{modeLabel(m)}</button>
+          ))}
+        </div>
+        {(mode === 'video' || mode === 'paid') && (
+          <input className="rounded-lg border border-black/10 px-3 py-1.5 text-[12px] flex-1 min-w-[160px]" dir="ltr" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder={mode === 'video' ? 'קישור וידאו (חובה)' : 'קישור מדיה (אופציונלי)'} />
+        )}
+        <button onClick={publishSelected} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
+          {busy ? 'מפרסם…' : `פרסם נבחרים`}
+        </button>
+        {pubNote && <span className="text-[12px] w-full">{pubNote}</span>}
+      </div>
     </div>
   );
+}
+
+function modeLabel(m: 'organic' | 'paid' | 'video'): string {
+  return m === 'organic' ? 'תוכן אורגני' : m === 'paid' ? 'ממומן' : 'סרטון';
 }
 
 function RsaAsset({ payload }: { payload: Record<string, unknown> }) {
