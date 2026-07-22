@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner } from '@/app/actions-campaigns';
+import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo } from '@/app/actions-campaigns';
 
 export type VariantRow = {
   id: string; campaign_asset_id: string; channel: string; angle: string | null;
-  angle_index: number; variation_index: number; body: string; ai_score: number; is_winner: boolean; published?: boolean;
+  angle_index: number; variation_index: number; body: string; ai_score: number; is_winner: boolean;
+  published?: boolean; views?: number; clicks?: number; impressions?: number; video_url?: string | null;
 };
 export type AssetRow = { id: string; channel: string; kind: string; budget: number | null; status?: string; payload: Record<string, unknown> };
 export type CampaignFull = { id: string; name: string; goal: string | null; brief: string | null; channels: string[] };
@@ -22,7 +23,17 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
   const [rows, setRows] = useState<VariantRow[]>(variants);
   const [building, setBuilding] = useState(pending > 0);
   const [note, setNote] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const runningRef = useRef(false);
+
+  async function syncMetrics() {
+    setSyncing(true); setNote(null);
+    const res = await syncCampaignMetrics(campaign.id);
+    setSyncing(false);
+    if ('error' in res && res.error) return setNote('שגיאה בריענון: ' + res.error);
+    setNote(`עודכנו נתונים ל-${(res as { updated: number }).updated} גרסאות.`);
+    router.refresh();
+  }
 
   // Progressive build — build ONE channel per call, refreshing between each, so
   // the user watches channels fill in one at a time (never all 108 at once).
@@ -51,8 +62,15 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
 
   return (
     <main className="max-w-[980px] mx-auto px-5 md:px-10 pt-8 pb-16" dir="rtl">
-      <div className="text-[13px] font-bold text-emerald-600 mb-1">HELIX OPS · קמפיין</div>
-      <h1 className="text-[clamp(22px,4vw,30px)] font-black tracking-tight">{campaign.name}</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[13px] font-bold text-emerald-600 mb-1">HELIX OPS · קמפיין</div>
+          <h1 className="text-[clamp(22px,4vw,30px)] font-black tracking-tight">{campaign.name}</h1>
+        </div>
+        <button onClick={syncMetrics} disabled={syncing} className="text-[13px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-4 py-2 disabled:opacity-50">
+          {syncing ? 'מרענן…' : '🔄 רענן נתונים אמיתיים'}
+        </button>
+      </div>
       {campaign.brief && <p className="text-[14px] text-[var(--ink-secondary)] mt-1 mb-4">{campaign.brief}</p>}
 
       {building && (
@@ -132,11 +150,22 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
                   <input type="checkbox" className="mt-1 accent-emerald-600" checked={selected.has(v.id)} onChange={() => toggle(v.id)} />
                   <div className="text-[13px] whitespace-pre-wrap flex-1">{v.body}</div>
                 </label>
+                {/* Real per-variant metrics (populated by the platform sync). */}
+                {((v.views ?? 0) > 0 || (v.clicks ?? 0) > 0 || (v.impressions ?? 0) > 0) && (
+                  <div className="flex flex-wrap gap-2 mt-2 text-[11px] font-semibold">
+                    {(v.views ?? 0) > 0 && <span className="rounded bg-black/5 px-2 py-0.5">👁 {v.views!.toLocaleString('he-IL')} צפיות</span>}
+                    {(v.clicks ?? 0) > 0 && <span className="rounded bg-black/5 px-2 py-0.5">🖱 {v.clicks!.toLocaleString('he-IL')} קליקים</span>}
+                    {(v.impressions ?? 0) > 0 && <span className="rounded bg-black/5 px-2 py-0.5">📊 {v.impressions!.toLocaleString('he-IL')} חשיפות</span>}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-[11px] text-[var(--ink-secondary)]">אנושיות: {v.ai_score}/100 {pub.has(v.id) && <span className="text-emerald-600 font-bold">· פורסם ✓</span>}</span>
-                  <button onClick={() => onWinner(v)} className={`text-[11px] font-bold rounded-lg px-2.5 py-1 ${v.is_winner ? 'bg-emerald-600 text-white' : 'bg-black/5 hover:bg-black/10'}`}>
-                    {v.is_winner ? '★ מנצח' : 'סמן מנצח'}
-                  </button>
+                  <span className="text-[11px] text-[var(--ink-secondary)]">אנושיות: {v.ai_score}/100 {pub.has(v.id) && <span className="text-emerald-600 font-bold">· פורסם ✓</span>} {v.video_url && <span title={v.video_url}>· 🎬</span>}</span>
+                  <div className="flex gap-1">
+                    <VideoAttach variantId={v.id} current={v.video_url ?? null} />
+                    <button onClick={() => onWinner(v)} className={`text-[11px] font-bold rounded-lg px-2.5 py-1 ${v.is_winner ? 'bg-emerald-600 text-white' : 'bg-black/5 hover:bg-black/10'}`}>
+                      {v.is_winner ? '★ מנצח' : 'סמן מנצח'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -166,6 +195,20 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
 
 function modeLabel(m: 'organic' | 'paid' | 'video'): string {
   return m === 'organic' ? 'תוכן אורגני' : m === 'paid' ? 'ממומן' : 'סרטון';
+}
+
+// Attach a video (produced in the Video Studio) to a variant, for video posts.
+function VideoAttach({ variantId, current }: { variantId: string; current: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(current ?? '');
+  const [busy, setBusy] = useState(false);
+  if (!open) return <button onClick={() => setOpen(true)} className="text-[11px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-2.5 py-1" title="צרף סרטון (מ-Video Studio)">🎬</button>;
+  return (
+    <span className="flex items-center gap-1">
+      <input className="rounded border border-black/10 px-2 py-1 text-[11px] w-[150px]" dir="ltr" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="video URL" />
+      <button disabled={busy} onClick={async () => { setBusy(true); await setVariantVideo(variantId, url); setBusy(false); setOpen(false); }} className="text-[11px] font-bold rounded bg-emerald-600 text-white px-2 py-1">שמור</button>
+    </span>
+  );
 }
 
 function RsaAsset({ payload }: { payload: Record<string, unknown> }) {

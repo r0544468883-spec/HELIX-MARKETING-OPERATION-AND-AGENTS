@@ -6,6 +6,7 @@ import { generateChannelVariants } from '@/lib/content-agent';
 import { createCampaignShell, buildOneAsset, type CampaignInput } from '@/lib/campaign-run';
 import { sendToChannel } from '@/lib/distribution';
 import { publishPaid } from '@/lib/distribution/paid';
+import { fetchInsights } from '@/lib/insights';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -93,7 +94,7 @@ export async function publishVariants(input: { variantIds: string[]; mode: Publi
   if (!input.variantIds.length) return { error: 'no_variants_selected' };
   if (input.mode === 'video' && !input.mediaUrl) return { error: 'video_requires_media' };
 
-  const { data: variants } = await supabase.from('content_variants').select('id, channel, body').in('id', input.variantIds);
+  const { data: variants } = await supabase.from('content_variants').select('id, channel, body, video_url').in('id', input.variantIds);
   const results: { id: string; ok: boolean; error?: string }[] = [];
 
   for (const v of variants ?? []) {
@@ -101,27 +102,77 @@ export async function publishVariants(input: { variantIds: string[]; mode: Publi
     if (!label) { results.push({ id: v.id as string, ok: false, error: 'channel_not_publishable' }); continue; }
     const { data: conn } = await supabase.from('channel_connections').select('config').eq('workspace_id', ws).eq('channel', label).maybeSingle();
     const baseConfig = (conn?.config ?? {}) as Record<string, unknown>;
+    // Video source: the variant's own attached video (Video Studio) wins, else the batch mediaUrl.
+    const videoUrl = (v.video_url as string | null) || input.mediaUrl;
 
     let res;
     if (input.mode === 'paid') {
-      res = await publishPaid(label, baseConfig, v.body as string, { budget: input.budget, mediaUrl: input.mediaUrl });
+      res = await publishPaid(label, baseConfig, v.body as string, { budget: input.budget, mediaUrl: videoUrl });
     } else {
-      // organic content, or video (attach video_url the video adapters consume).
-      const config = input.mediaUrl ? { ...baseConfig, video_url: input.mediaUrl } : baseConfig;
+      const config = videoUrl ? { ...baseConfig, video_url: videoUrl } : baseConfig;
       res = await sendToChannel(label, config, v.body as string);
     }
 
     await supabase.from('publications').insert({
-      workspace_id: ws, channel: label, content: v.body, variant_id: v.id, mode: input.mode, media_url: input.mediaUrl ?? null,
+      workspace_id: ws, channel: label, content: v.body, variant_id: v.id, mode: input.mode, media_url: videoUrl ?? null,
       status: res.ok ? 'sent' : 'failed', external_id: res.externalId ?? null, error: res.error ?? null, sent_at: res.ok ? new Date().toISOString() : null,
     });
-    if (res.ok) await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString() }).eq('id', v.id);
+    if (res.ok) await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString(), external_id: res.externalId ?? null }).eq('id', v.id);
     results.push({ id: v.id as string, ok: res.ok, error: res.error });
   }
 
   revalidatePath('/campaigns');
   const sent = results.filter((r) => r.ok).length;
   return { ok: true, sent, failed: results.length - sent, results };
+}
+
+// Attach a video (from the Video Studio export) to a variant, for video posts.
+export async function setVariantVideo(variantId: string, videoUrl: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const { error } = await supabase.from('content_variants').update({ video_url: videoUrl.trim() || null }).eq('id', variantId);
+  if (error) return { error: error.message };
+  revalidatePath('/campaigns');
+  return { ok: true };
+}
+
+// Pull REAL per-variant metrics (impressions/views/clicks) from each platform for
+// every published variant in a campaign, and store them on content_variants. This
+// is what powers "how many watched/clicked this variant" + performance-based winner.
+const CH_LABEL: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין', tiktok: 'TikTok', youtube: 'YouTube' };
+export async function syncCampaignMetrics(campaignId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+
+  const { data: assetIds } = await supabase.from('campaign_assets').select('id').eq('campaign_id', campaignId);
+  const { data: variants } = await supabase.from('content_variants')
+    .select('id, channel, external_id').eq('published', true)
+    .in('campaign_asset_id', assetIds?.map((a) => a.id) ?? ['00000000-0000-0000-0000-000000000000']);
+
+  let updated = 0;
+  const configCache = new Map<string, Record<string, unknown>>();
+  for (const v of variants ?? []) {
+    if (!v.external_id) continue;
+    const label = CH_LABEL[v.channel as string] ?? (v.channel as string);
+    let config = configCache.get(label);
+    if (!config) {
+      const { data: conn } = await supabase.from('channel_connections').select('config').eq('workspace_id', ws).eq('channel', label).maybeSingle();
+      config = (conn?.config ?? {}) as Record<string, unknown>;
+      configCache.set(label, config);
+    }
+    const m = await fetchInsights(label, config, v.external_id as string);
+    if (!m) continue;
+    await supabase.from('content_variants').update({
+      impressions: m.impressions ?? 0, views: m.views ?? 0, clicks: m.clicks ?? 0, ...(m.conversions != null ? { conversions: m.conversions } : {}),
+    }).eq('id', v.id);
+    updated++;
+  }
+  revalidatePath(`/campaigns/${campaignId}`);
+  return { ok: true, updated };
 }
 
 // Automatic A/B winner — pick by real performance if any exists (conversions>clicks>
@@ -132,12 +183,12 @@ export async function autoPickWinner(assetId: string) {
   if (!user) return { error: 'unauthorized' };
 
   const { data: variants } = await supabase.from('content_variants')
-    .select('id, impressions, clicks, conversions, ai_score').eq('campaign_asset_id', assetId);
+    .select('id, impressions, views, clicks, conversions, ai_score').eq('campaign_asset_id', assetId);
   if (!variants || variants.length === 0) return { error: 'no_variants' };
 
-  const hasPerf = variants.some((v) => (v.clicks ?? 0) > 0 || (v.conversions ?? 0) > 0 || (v.impressions ?? 0) > 0);
+  const hasPerf = variants.some((v) => (v.clicks ?? 0) > 0 || (v.conversions ?? 0) > 0 || (v.impressions ?? 0) > 0 || (v.views ?? 0) > 0);
   const score = (v: typeof variants[number]) => hasPerf
-    ? (v.conversions ?? 0) * 1000 + (v.clicks ?? 0) * 10 + (v.impressions ?? 0) * 0.1
+    ? (v.conversions ?? 0) * 1000 + (v.clicks ?? 0) * 10 + (v.views ?? 0) * 1 + (v.impressions ?? 0) * 0.1
     : (v.ai_score ?? 0);
   const winner = variants.reduce((best, v) => (score(v) > score(best) ? v : best), variants[0]);
 

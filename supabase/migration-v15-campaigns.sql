@@ -44,13 +44,16 @@ create table if not exists content_variants (
   body              text not null,
   language          text default 'he',                 -- he | en
   ai_score          int default 0,                     -- 0-100 human-ness gate
-  -- A/B performance (filled from post_performance after publishing)
+  -- A/B performance PER VARIANT — synced from the platform after publishing.
   impressions       int default 0,
+  views             int default 0,                     -- video views
   clicks            int default 0,
   conversions       int default 0,
   is_winner         boolean default false,
   published         boolean default false,             -- published to its channel?
   published_at      timestamptz,
+  external_id       text,                              -- platform post/creative id (for insights)
+  video_url         text,                              -- attached video (from Video Studio) for video posts
   created_at        timestamptz default now()
 );
 create index if not exists idx_variants_asset on content_variants(campaign_asset_id);

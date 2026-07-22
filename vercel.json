@@ -7,6 +7,10 @@
     {
       "path": "/api/email/run-scheduled",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/variant-metrics",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
