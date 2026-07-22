@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo } from '@/app/actions-campaigns';
+import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo, launchPaidCampaign } from '@/app/actions-campaigns';
 
 export type VariantRow = {
   id: string; campaign_asset_id: string; channel: string; angle: string | null;
@@ -107,10 +107,12 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
   );
 }
 
-function SocialAsset({ variants, onWinner }: { assetId: string; variants: VariantRow[]; onWinner: (v: VariantRow) => void }) {
+function SocialAsset({ assetId, variants, onWinner }: { assetId: string; variants: VariantRow[]; onWinner: (v: VariantRow) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<'organic' | 'paid' | 'video'>('organic');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [dailyBudget, setDailyBudget] = useState('');
+  const [objective, setObjective] = useState('OUTCOME_TRAFFIC');
   const [busy, setBusy] = useState(false);
   const [pubNote, setPubNote] = useState<string | null>(null);
   const [pub, setPub] = useState<Set<string>>(new Set(variants.filter((v) => v.published).map((v) => v.id)));
@@ -131,6 +133,20 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
     setPub((p) => new Set([...p, ...[...selected]]));
     setSelected(new Set());
     setPubNote(`✅ פורסמו ${(res as { sent: number }).sent} גרסאות (${modeLabel(mode)}).`);
+  }
+
+  // Full Meta paid campaign — Campaign + Ad Set (budget) + an Ad per selected variant.
+  async function launchPaid() {
+    if (selected.size === 0) return setPubNote('בחר גרסאות לקמפיין הממומן.');
+    if (!dailyBudget || Number(dailyBudget) <= 0) return setPubNote('הכנס תקציב יומי.');
+    if (!window.confirm(`להשיק קמפיין ממומן ב-Meta עם ${selected.size} מודעות (A/B), תקציב ₪${dailyBudget}/יום? הקמפיין ייווצר במצב מושהה (PAUSED) — תפעיל ב-Ads Manager.`)) return;
+    setBusy(true); setPubNote(null);
+    const res = await launchPaidCampaign({ assetId, variantIds: [...selected], dailyBudget: Number(dailyBudget), objective });
+    setBusy(false);
+    if ('error' in res && res.error) return setPubNote('שגיאה: ' + res.error);
+    setPub((p) => new Set([...p, ...[...selected]]));
+    setSelected(new Set());
+    setPubNote(`✅ קמפיין ממומן נוצר ב-Meta (${(res as { ads: number }).ads} מודעות, מושהה). הפעל ב-Ads Manager.`);
   }
 
   // Group by angle_index.
@@ -186,9 +202,26 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
         {(mode === 'video' || mode === 'paid') && (
           <input className="rounded-lg border border-black/10 px-3 py-1.5 text-[12px] flex-1 min-w-[160px]" dir="ltr" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder={mode === 'video' ? 'קישור וידאו (חובה)' : 'קישור מדיה (אופציונלי)'} />
         )}
-        <button onClick={publishSelected} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
-          {busy ? 'מפרסם…' : `פרסם נבחרים`}
-        </button>
+        {mode === 'paid' && (
+          <>
+            <input className="rounded-lg border border-black/10 px-3 py-1.5 text-[12px] w-[120px]" dir="ltr" value={dailyBudget} onChange={(e) => setDailyBudget(e.target.value)} placeholder="תקציב יומי ₪" />
+            <select className="rounded-lg border border-black/10 px-2 py-1.5 text-[12px]" value={objective} onChange={(e) => setObjective(e.target.value)}>
+              <option value="OUTCOME_TRAFFIC">תנועה</option>
+              <option value="OUTCOME_LEADS">לידים</option>
+              <option value="OUTCOME_AWARENESS">מודעות</option>
+              <option value="OUTCOME_SALES">מכירות</option>
+            </select>
+          </>
+        )}
+        {mode === 'paid' ? (
+          <button onClick={launchPaid} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
+            {busy ? 'משיק…' : '🚀 השק קמפיין ממומן (Meta)'}
+          </button>
+        ) : (
+          <button onClick={publishSelected} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
+            {busy ? 'מפרסם…' : `פרסם נבחרים`}
+          </button>
+        )}
         {pubNote && <span className="text-[12px] w-full">{pubNote}</span>}
       </div>
     </div>

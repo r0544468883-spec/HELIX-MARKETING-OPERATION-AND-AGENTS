@@ -27,6 +27,7 @@ create table if not exists campaign_assets (
   kind         text default 'social',                 -- social | search_ads | seo
   budget       numeric,                                -- allocated budget for this channel
   status       text default 'pending',                -- pending | ready (incremental build)
+  paid_campaign jsonb,                                 -- {meta_campaign_id, adset_id, ad_ids} after a paid launch
   payload      jsonb default '{}'::jsonb,              -- channel-specific structured output
   created_at   timestamptz default now()
 );

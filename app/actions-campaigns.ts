@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { generateChannelVariants } from '@/lib/content-agent';
 import { createCampaignShell, buildOneAsset, type CampaignInput } from '@/lib/campaign-run';
 import { sendToChannel } from '@/lib/distribution';
-import { publishPaid } from '@/lib/distribution/paid';
+import { publishPaid, createMetaCampaign, type MetaTargeting } from '@/lib/distribution/paid';
 import { fetchInsights } from '@/lib/insights';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
@@ -124,6 +124,45 @@ export async function publishVariants(input: { variantIds: string[]; mode: Publi
   revalidatePath('/campaigns');
   const sent = results.filter((r) => r.ok).length;
   return { ok: true, sent, failed: results.length - sent, results };
+}
+
+// Launch a FULL Meta paid campaign — one Campaign + Ad Set (budget/targeting) +
+// an Ad per selected variant (A/B). Created PAUSED; the user activates in Ads
+// Manager. Stores the Meta ids on the asset and marks variants published.
+export async function launchPaidCampaign(input: {
+  assetId: string; variantIds: string[]; dailyBudget: number; objective?: string; link?: string; targeting?: MetaTargeting;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+  if (!input.variantIds.length || !input.dailyBudget) return { error: 'variants_and_budget_required' };
+
+  const { data: asset } = await supabase.from('campaign_assets').select('id, channel').eq('id', input.assetId).maybeSingle();
+  const label = asset ? PUBLISH_LABEL[asset.channel as string] : null;
+  if (label !== 'פייסבוק' && label !== 'אינסטגרם') return { error: 'paid_campaign_meta_only' };
+
+  const { data: variants } = await supabase.from('content_variants').select('id, body, video_url').in('id', input.variantIds);
+  const { data: conn } = await supabase.from('channel_connections').select('config').eq('workspace_id', ws).eq('channel', label).maybeSingle();
+
+  const res = await createMetaCampaign((conn?.config ?? {}) as Record<string, unknown>, {
+    name: `HELIX ${new Date().toISOString().slice(0, 10)}`,
+    objective: input.objective, dailyBudget: input.dailyBudget, targeting: input.targeting, link: input.link,
+    creatives: (variants ?? []).map((v) => ({ message: v.body as string, picture: (v.video_url as string) || undefined })),
+  });
+  if (!res.ok) return { error: res.error };
+
+  await supabase.from('campaign_assets').update({ paid_campaign: { meta_campaign_id: res.campaignId, adset_id: res.adsetId, ad_ids: res.adIds } }).eq('id', input.assetId);
+  // Map each variant to its ad id for later insights; mark published.
+  const vlist = variants ?? [];
+  for (let i = 0; i < vlist.length; i++) {
+    await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString(), external_id: res.adIds?.[i] ?? null }).eq('id', vlist[i].id);
+  }
+  await supabase.from('publications').insert({ workspace_id: ws, channel: label, content: `Paid campaign (${res.adIds?.length ?? 0} ads)`, mode: 'paid', status: 'sent', external_id: res.campaignId ?? null, sent_at: new Date().toISOString() });
+
+  revalidatePath('/campaigns');
+  return { ok: true, campaignId: res.campaignId, ads: res.adIds?.length ?? 0 };
 }
 
 // Attach a video (from the Video Studio export) to a variant, for video posts.
