@@ -94,8 +94,27 @@ async function buildSeo(brief: string, title: string): Promise<SeoPlan> {
   return parseJson<SeoPlan>(raw, { primaryKeyword: title, keywords: [], title, outline: [] });
 }
 
-// Build all requested channels in parallel. Persona tailors copy; budget is
-// allocated per channel. `variantsPerChannel` caps A/B variants.
+// Build the content for ONE channel (the unit of incremental work — the campaign
+// builds one channel at a time so results appear progressively, never 108 at once).
+export async function buildChannelContent(
+  channel: string,
+  briefWithPersona: string,
+  title: string,
+  variationsPerAngle = 6
+): Promise<CampaignAsset> {
+  if (channel === 'google_ads') return { channel, kind: 'search_ads', rsa: await buildGoogleAds(briefWithPersona, title) };
+  if (channel === 'seo') return { channel, kind: 'seo', plan: await buildSeo(briefWithPersona, title) };
+  const label = SOCIAL_LABEL[channel] ?? channel;
+  const variants = await generateChannelVariants(briefWithPersona, title, label, 6, variationsPerAngle);
+  return { channel, kind: 'social', variants };
+}
+
+export function assetKind(channel: string): 'social' | 'search_ads' | 'seo' {
+  return channel === 'google_ads' ? 'search_ads' : channel === 'seo' ? 'seo' : 'social';
+}
+
+// Full parallel build (kept for the bot's one-shot summary path). The UI uses the
+// incremental per-channel path instead.
 export async function buildCampaign(input: {
   brief: string;
   title: string;
@@ -107,22 +126,14 @@ export async function buildCampaign(input: {
   const vPerAngle = input.variantsPerChannel ?? 6;
   const brief = personaBrief(input.brief, input.clientProfile);
   const alloc = allocate(input.channels, input.budget);
-
-  const jobs = input.channels.map(async (channel): Promise<CampaignResult[number]> => {
-    const budget = alloc[channel];
-    if (channel === 'google_ads') {
-      return { channel, budget, asset: { channel, kind: 'search_ads', rsa: await buildGoogleAds(brief, input.title) } };
-    }
-    if (channel === 'seo') {
-      return { channel, budget, asset: { channel, kind: 'seo', plan: await buildSeo(brief, input.title) } };
-    }
-    const label = SOCIAL_LABEL[channel] ?? channel;
-    const variants = await generateChannelVariants(brief, input.title, label, 6, vPerAngle);
-    return { channel, budget, asset: { channel, kind: 'social', variants } };
-  });
-
+  const jobs = input.channels.map(async (channel): Promise<CampaignResult[number]> => ({
+    channel, budget: alloc[channel], asset: await buildChannelContent(channel, brief, input.title, vPerAngle),
+  }));
   return Promise.all(jobs);
 }
+
+// Expose the persona/allocate helpers for the incremental runner.
+export { personaBrief, allocate };
 
 export const CAMPAIGN_CHANNELS = [
   { id: 'facebook', label: 'פייסבוק', kind: 'social' },

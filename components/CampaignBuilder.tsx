@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createCampaign } from '@/app/actions-campaigns';
 
 export type CampaignRow = { id: string; name: string; goal: string | null; channels: string[]; status: string };
@@ -18,6 +19,7 @@ const label = 'block text-[13px] font-semibold mb-1';
 // Campaign Builder — one brief + client persona + budget → full cross-channel
 // campaign (each channel with up to 6 A/B variants). Same builder the bot uses.
 export default function CampaignBuilder({ campaigns, locale }: { campaigns: CampaignRow[]; locale: string }) {
+  const router = useRouter();
   const [rows, setRows] = useState<CampaignRow[]>(campaigns);
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('leads');
@@ -48,9 +50,9 @@ export default function CampaignBuilder({ campaigns, locale }: { campaigns: Camp
     });
     setBusy(false);
     if ('error' in res && res.error) return setMsg('שגיאה: ' + res.error);
-    setRows((r) => [{ id: (res as { id: string }).id, name: name.trim(), goal, channels, status: 'ready' }, ...r]);
-    setMsg('✅ הקמפיין נבנה — כולל וריאציות A/B לכל ערוץ. גלול לרשימה למטה.');
-    setName(''); setBrief('');
+    // Shell created instantly — go to the detail page which builds the channels
+    // one at a time (progressively), not all 108 variants at once.
+    router.push(`/${locale}/campaigns/${(res as { id: string }).id}`);
   }
 
   return (

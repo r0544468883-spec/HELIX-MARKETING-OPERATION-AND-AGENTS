@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { generateChannelVariants } from '@/lib/content-agent';
-import { runCampaign, type CampaignInput } from '@/lib/campaign-run';
+import { createCampaignShell, buildOneAsset, type CampaignInput } from '@/lib/campaign-run';
+import { sendToChannel } from '@/lib/distribution';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -14,17 +15,29 @@ async function currentWorkspace(supabase: SupabaseServer, userId: string): Promi
   return (wsId as string) ?? null;
 }
 
-// Build a full cross-channel campaign (FB/IG/LinkedIn/Google Ads/SEO), persisting
-// campaign + per-channel assets + up to 6 A/B variants each.
+// Create the campaign SHELL — pending asset per channel, no AI yet (fast). The UI
+// then calls buildNextAsset repeatedly so channels build one at a time.
 export async function createCampaign(input: CampaignInput) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'unauthorized' };
   const ws = await currentWorkspace(supabase, user.id);
   if (!ws) return { error: 'no_workspace' };
-  const res = await runCampaign(supabase, ws, input);
-  if (res.ok) revalidatePath('/campaigns');
-  return res.ok ? { ok: true, id: res.id } : { error: res.error };
+  const res = await createCampaignShell(supabase, ws, input);
+  if (res.id) revalidatePath('/campaigns');
+  return res.id ? { ok: true, id: res.id, pending: res.pending } : { error: res.error };
+}
+
+// Build the NEXT pending channel of a campaign (one per call → progressive build).
+export async function buildNextAsset(campaignId: string, variationsPerAngle = 6) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+  const res = await buildOneAsset(supabase, ws, campaignId, variationsPerAngle);
+  revalidatePath(`/campaigns/${campaignId}`);
+  return res;
 }
 
 // Mark one variant as the A/B winner (clears the flag on its siblings in the same asset).
@@ -37,6 +50,56 @@ export async function setVariantWinner(variantId: string, assetId: string) {
   if (error) return { error: error.message };
   revalidatePath('/campaigns');
   return { ok: true };
+}
+
+// Campaign channel key → the distribution engine's Hebrew channel label.
+const PUBLISH_LABEL: Record<string, string> = { facebook: 'פייסבוק', instagram: 'אינסטגרם', linkedin: 'לינקדאין' };
+
+// Publish a specific variant (usually the winner) to its channel via the shared
+// distribution engine, and log a publications row.
+export async function publishVariant(variantId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+
+  const { data: v } = await supabase.from('content_variants').select('channel, body').eq('id', variantId).maybeSingle();
+  if (!v) return { error: 'variant_not_found' };
+  const label = PUBLISH_LABEL[v.channel as string];
+  if (!label) return { error: 'channel_not_publishable' }; // google_ads/seo are exported, not sent
+
+  const { data: conn } = await supabase.from('channel_connections').select('config').eq('workspace_id', ws).eq('channel', label).maybeSingle();
+  const res = await sendToChannel(label, (conn?.config ?? {}) as Record<string, unknown>, v.body as string);
+
+  await supabase.from('publications').insert({
+    workspace_id: ws, channel: label, content: v.body,
+    status: res.ok ? 'sent' : 'failed', external_id: res.externalId ?? null, error: res.error ?? null, sent_at: res.ok ? new Date().toISOString() : null,
+  });
+  return res.ok ? { ok: true } : { error: res.error };
+}
+
+// Automatic A/B winner — pick by real performance if any exists (conversions>clicks>
+// impressions), else fall back to the highest AI-humanness score. Sets is_winner.
+export async function autoPickWinner(assetId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+
+  const { data: variants } = await supabase.from('content_variants')
+    .select('id, impressions, clicks, conversions, ai_score').eq('campaign_asset_id', assetId);
+  if (!variants || variants.length === 0) return { error: 'no_variants' };
+
+  const hasPerf = variants.some((v) => (v.clicks ?? 0) > 0 || (v.conversions ?? 0) > 0 || (v.impressions ?? 0) > 0);
+  const score = (v: typeof variants[number]) => hasPerf
+    ? (v.conversions ?? 0) * 1000 + (v.clicks ?? 0) * 10 + (v.impressions ?? 0) * 0.1
+    : (v.ai_score ?? 0);
+  const winner = variants.reduce((best, v) => (score(v) > score(best) ? v : best), variants[0]);
+
+  await supabase.from('content_variants').update({ is_winner: false }).eq('campaign_asset_id', assetId);
+  await supabase.from('content_variants').update({ is_winner: true }).eq('id', winner.id);
+  revalidatePath('/campaigns');
+  return { ok: true, winnerId: winner.id, basis: hasPerf ? 'performance' : 'ai_score' };
 }
 
 // Standalone A/B: up to 6 variants for a single channel/publication (no campaign).

@@ -26,6 +26,7 @@ create table if not exists campaign_assets (
   channel      text not null,
   kind         text default 'social',                 -- social | search_ads | seo
   budget       numeric,                                -- allocated budget for this channel
+  status       text default 'pending',                -- pending | ready (incremental build)
   payload      jsonb default '{}'::jsonb,              -- channel-specific structured output
   created_at   timestamptz default now()
 );
