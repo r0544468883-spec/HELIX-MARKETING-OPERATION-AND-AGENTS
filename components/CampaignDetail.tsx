@@ -122,6 +122,8 @@ function SocialAsset({ variants, onWinner }: { assetId: string; variants: Varian
   async function publishSelected() {
     if (selected.size === 0) return setPubNote('בחר לפחות גרסה אחת.');
     if (mode === 'video' && !mediaUrl.trim()) return setPubNote('מצב סרטון דורש קישור וידאו.');
+    // Live action — confirm before publishing to real platforms.
+    if (!window.confirm(`לפרסם ${selected.size} גרסאות במצב "${modeLabel(mode)}"? הפעולה מפרסמת בפלטפורמות בפועל.`)) return;
     setBusy(true); setPubNote(null);
     const res = await publishVariants({ variantIds: [...selected], mode, mediaUrl: mediaUrl.trim() || undefined });
     setBusy(false);
