@@ -38,7 +38,7 @@ export async function campaignFromText(client: unknown, ws: string, text: string
 
   const lines = res.result.map((r) => {
     const b = r.budget ? ` (₪${r.budget.toLocaleString('he-IL')})` : '';
-    if (r.asset.kind === 'social') return `• ${r.channel}${b}: ${r.asset.variants.length} וריאציות A/B`;
+    if (r.asset.kind === 'social') { const angles = new Set(r.asset.variants.map((v) => v.angleIndex)).size; return `• ${r.channel}${b}: ${r.asset.variants.length} וריאציות A/B (${angles} סגנונות)`; }
     if (r.asset.kind === 'search_ads') return `• ${r.channel}${b}: ${r.asset.rsa.headlines.length} כותרות + ${r.asset.rsa.descriptions.length} תיאורים`;
     return `• ${r.channel}${b}: תוכנית SEO — ${r.asset.plan.keywords.length} מילות מפתח + outline`;
   });

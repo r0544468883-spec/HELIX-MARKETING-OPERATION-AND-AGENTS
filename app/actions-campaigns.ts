@@ -27,8 +27,20 @@ export async function createCampaign(input: CampaignInput) {
   return res.ok ? { ok: true, id: res.id } : { error: res.error };
 }
 
+// Mark one variant as the A/B winner (clears the flag on its siblings in the same asset).
+export async function setVariantWinner(variantId: string, assetId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  await supabase.from('content_variants').update({ is_winner: false }).eq('campaign_asset_id', assetId);
+  const { error } = await supabase.from('content_variants').update({ is_winner: true }).eq('id', variantId);
+  if (error) return { error: error.message };
+  revalidatePath('/campaigns');
+  return { ok: true };
+}
+
 // Standalone A/B: up to 6 variants for a single channel/publication (no campaign).
-export async function generateVariants(input: { title: string; brief: string; channel: string; n?: number }) {
+export async function generateVariants(input: { title: string; brief: string; channel: string; angles?: number; n?: number }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'unauthorized' };
@@ -37,10 +49,11 @@ export async function generateVariants(input: { title: string; brief: string; ch
   if (!input.title.trim() || !input.brief.trim()) return { error: 'missing_fields' };
 
   try {
-    const variants = await generateChannelVariants(input.brief, input.title, input.channel, input.n ?? 6);
+    const variants = await generateChannelVariants(input.brief, input.title, input.channel, input.angles ?? 6, input.n ?? 6);
     const rows = variants.map((v) => ({
       workspace_id: ws, campaign_asset_id: null, channel: input.channel,
-      variant_index: v.index, angle: v.angle, body: v.body, language: v.language, ai_score: v.aiScore,
+      variant_index: v.index, angle: v.angle, angle_index: v.angleIndex, variation_index: v.variationIndex,
+      body: v.body, language: v.language, ai_score: v.aiScore,
     }));
     if (rows.length) await supabase.from('content_variants').insert(rows);
     return { ok: true, variants };

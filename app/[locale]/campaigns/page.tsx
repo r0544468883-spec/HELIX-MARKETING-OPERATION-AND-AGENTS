@@ -19,5 +19,5 @@ export default async function CampaignsPage({ params }: { params: Promise<{ loca
     campaigns = (data ?? []) as CampaignRow[];
   }
 
-  return <CampaignBuilder campaigns={campaigns} />;
+  return <CampaignBuilder campaigns={campaigns} locale={locale} />;
 }

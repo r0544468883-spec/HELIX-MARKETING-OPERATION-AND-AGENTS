@@ -45,7 +45,8 @@ export async function runCampaign(client: unknown, ws: string, input: CampaignIn
     if (asset.kind === 'social' && ca) {
       const rows = asset.variants.map((v) => ({
         workspace_id: ws, campaign_asset_id: ca.id, channel, variant_index: v.index,
-        angle: v.angle, body: v.body, language: v.language, ai_score: v.aiScore,
+        angle: v.angle, angle_index: v.angleIndex, variation_index: v.variationIndex,
+        body: v.body, language: v.language, ai_score: v.aiScore,
       }));
       if (rows.length) await db.from('content_variants').insert(rows);
     }

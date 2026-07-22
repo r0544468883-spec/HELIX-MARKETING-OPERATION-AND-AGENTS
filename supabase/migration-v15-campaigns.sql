@@ -36,8 +36,10 @@ create table if not exists content_variants (
   workspace_id      uuid not null,
   campaign_asset_id uuid references campaign_assets(id) on delete cascade,
   channel           text not null,
-  variant_index     int not null,                      -- 0..5
-  angle             text,                              -- the distinct hook/angle label
+  variant_index     int not null,                      -- global index (0..35)
+  angle             text,                              -- the persuasion angle label
+  angle_index       int default 0,                     -- which angle (0..5)
+  variation_index   int default 0,                     -- variation within the angle (0..5)
   body              text not null,
   language          text default 'he',                 -- he | en
   ai_score          int default 0,                     -- 0-100 human-ness gate

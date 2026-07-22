@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { createCampaign } from '@/app/actions-campaigns';
 
 export type CampaignRow = { id: string; name: string; goal: string | null; channels: string[]; status: string };
@@ -16,7 +17,7 @@ const label = 'block text-[13px] font-semibold mb-1';
 
 // Campaign Builder — one brief + client persona + budget → full cross-channel
 // campaign (each channel with up to 6 A/B variants). Same builder the bot uses.
-export default function CampaignBuilder({ campaigns }: { campaigns: CampaignRow[] }) {
+export default function CampaignBuilder({ campaigns, locale }: { campaigns: CampaignRow[]; locale: string }) {
   const [rows, setRows] = useState<CampaignRow[]>(campaigns);
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('leads');
@@ -106,10 +107,10 @@ export default function CampaignBuilder({ campaigns }: { campaigns: CampaignRow[
         ) : (
           <div className="space-y-2">
             {rows.map((c) => (
-              <div key={c.id} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white p-3">
+              <Link key={c.id} href={`/${locale}/campaigns/${c.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-white p-3 hover:border-emerald-500 transition-colors">
                 <div><div className="text-[14px] font-bold">{c.name}</div><div className="text-[12px] text-[var(--ink-secondary)]">{c.channels.join(' · ')}</div></div>
-                <span className="text-[12px] font-semibold text-emerald-600">{c.status}</span>
-              </div>
+                <span className="text-[12px] font-semibold text-emerald-600">{c.status} ←</span>
+              </Link>
             ))}
           </div>
         )}

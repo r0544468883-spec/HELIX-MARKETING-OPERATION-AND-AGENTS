@@ -95,10 +95,16 @@ export async function generateChannelDraft(
   return { body, language: cfg.lang, aiScore };
 }
 
-// Distinct-angle A/B variants for one channel. Each variant takes a different
-// persuasion angle so the test is meaningful (not 6 rewordings of the same idea).
-// Returns up to `n` (max 6) variants, each humanized + AI-scored like a draft.
-export type Variant = ChannelDraft & { angle: string; index: number };
+// A/B variants for one channel, organized as ANGLES × variations. Each of the 6
+// persuasion angles yields up to 6 distinct variations of that same angle, so a
+// full channel can produce up to 36 test variants. Cost-efficient: one generation
+// call + one scoring call PER ANGLE (JSON-batched), not per variation.
+export type Variant = ChannelDraft & {
+  angle: string;
+  angleIndex: number;
+  variationIndex: number;
+  index: number; // global 0-based index
+};
 
 const ANGLES: { he: string; en: string }[] = [
   { he: 'תועלת ישירה (מה הלקוח מרוויח)', en: 'Direct benefit (what the customer gains)' },
@@ -109,36 +115,55 @@ const ANGLES: { he: string; en: string }[] = [
   { he: 'שאלה/סקרנות (hook פותח)', en: 'Question/curiosity (opening hook)' },
 ];
 
+function parseJsonArray(raw: string): unknown[] {
+  try { const m = raw.match(/\[[\s\S]*\]/); return m ? (JSON.parse(m[0]) as unknown[]) : []; } catch { return []; }
+}
+
+// Generate `count` distinct variations for one angle, humanized in-prompt, then
+// batch-score them. Returns the variation bodies + per-variation AI scores.
+async function variationsForAngle(
+  brief: string, title: string, channel: string, guide: string, lang: Lang, angle: string, count: number
+): Promise<{ body: string; aiScore: number }[]> {
+  const genSystem = lang === 'he'
+    ? `אתה קופירייטר ישראלי מנוסה. כתוב ${count} וריאציות **שונות זו מזו** לתוכן ${channel} מהזווית: "${angle}". ${guide} שנֵה בין הווריאציות את ה-hook הפותח, האורך, ניסוח ה-CTA והמקצב — אבל שמור על אותה זווית. עברית אנושית-ישראלית טבעית (לא כמו AI). החזר JSON בלבד: array של ${count} מחרוזות.`
+    : `You are an expert copywriter. Write ${count} **distinct** variations of ${channel} content from this angle: "${angle}". ${guide} Vary the opening hook, length, CTA phrasing and rhythm across variations, same angle. Return JSON only: an array of ${count} strings.`;
+  const genRaw = await claude(genSystem, `כותרת: ${title}\nבריף: ${brief}`, 1500);
+  let bodies = parseJsonArray(genRaw).map((x) => String(x)).filter(Boolean).slice(0, count);
+  if (bodies.length === 0) bodies = [genRaw]; // fallback: model returned prose
+
+  // Batch AI-humanness scores (one call → array of numbers).
+  const scoreRaw = await claude(
+    lang === 'he'
+      ? `דרג כל טקסט 0-100 (100=אנושי, 0=AI). החזר JSON בלבד: array של ${bodies.length} מספרים, לפי הסדר.`
+      : `Rate each text 0-100 (100=human). Return JSON only: an array of ${bodies.length} numbers, in order.`,
+    bodies.map((b, i) => `[${i + 1}]\n${b}`).join('\n\n'), 120
+  );
+  const scores = parseJsonArray(scoreRaw).map((x) => Math.max(0, Math.min(100, parseInt(String(x).replace(/\D/g, ''), 10) || 0)));
+
+  return bodies.map((body, i) => ({ body, aiScore: scores[i] ?? 0 }));
+}
+
 export async function generateChannelVariants(
   brief: string,
   title: string,
   channel: string,
-  n = 6
+  anglesCount = 6,
+  variationsPerAngle = 6
 ): Promise<Variant[]> {
   const cfg = CHANNEL_GUIDE[channel] ?? { lang: 'he' as Lang, guide: 'תוכן שיווקי קצר וברור.' };
-  const count = Math.max(1, Math.min(6, n));
+  const aCount = Math.max(1, Math.min(6, anglesCount));
+  const vCount = Math.max(1, Math.min(6, variationsPerAngle));
 
-  // Generate each angle in parallel; each still runs the full draft→humanize→score.
-  const jobs = ANGLES.slice(0, count).map(async (angleDef, index): Promise<Variant> => {
-    const angle = cfg.lang === 'he' ? angleDef.he : angleDef.en;
-    const draftSystem =
-      cfg.lang === 'he'
-        ? `אתה קופירייטר מנוסה. כתוב תוכן שיווקי עבור ${channel} מזווית: "${angle}". ${cfg.guide} כתוב בעברית תקנית ואנושית. החזר אך ורק את התוכן.`
-        : `You are an expert copywriter. Write ${channel} content from this angle: "${angle}". ${cfg.guide} Return only the content.`;
-    let body = await claude(draftSystem, `כותרת: ${title}\nבריף: ${brief}`);
-    if (cfg.lang === 'he') {
-      body = await claude(
-        'אתה עורך עברית. שכתב שיישמע אנושי-ישראלי טבעי (לא כמו AI) ותקן שגיאות. שמור משמעות/טון/אורך. החזר רק את הטקסט.',
-        body
-      );
-    }
-    const scoreRaw = await claude(
-      cfg.lang === 'he' ? 'דרג 0-100 עד כמה הטקסט אנושי (100) מול AI (0). החזר רק מספר.' : 'Rate 0-100 how human this reads. Return only a number.',
-      body, 10
-    );
-    const aiScore = Math.max(0, Math.min(100, parseInt(scoreRaw.replace(/\D/g, ''), 10) || 0));
-    return { body, language: cfg.lang, aiScore, angle, index };
-  });
+  // Each angle handled in parallel; variations batched inside.
+  const perAngle = await Promise.all(
+    ANGLES.slice(0, aCount).map(async (angleDef, angleIndex) => {
+      const angle = cfg.lang === 'he' ? angleDef.he : angleDef.en;
+      const vs = await variationsForAngle(brief, title, channel, cfg.guide, cfg.lang, angle, vCount);
+      return vs.map((v, variationIndex): Omit<Variant, 'index'> => ({
+        body: v.body, language: cfg.lang, aiScore: v.aiScore, angle, angleIndex, variationIndex,
+      }));
+    })
+  );
 
-  return Promise.all(jobs);
+  return perAngle.flat().map((v, index) => ({ ...v, index }));
 }

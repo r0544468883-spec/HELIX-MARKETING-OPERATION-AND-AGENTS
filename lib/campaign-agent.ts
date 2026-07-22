@@ -102,9 +102,9 @@ export async function buildCampaign(input: {
   channels: string[];
   clientProfile?: ClientProfile;
   budget?: Budget;
-  variantsPerChannel?: number;
+  variantsPerChannel?: number; // variations PER ANGLE (6 angles × this = total per channel)
 }): Promise<CampaignResult> {
-  const n = input.variantsPerChannel ?? 6;
+  const vPerAngle = input.variantsPerChannel ?? 6;
   const brief = personaBrief(input.brief, input.clientProfile);
   const alloc = allocate(input.channels, input.budget);
 
@@ -117,7 +117,7 @@ export async function buildCampaign(input: {
       return { channel, budget, asset: { channel, kind: 'seo', plan: await buildSeo(brief, input.title) } };
     }
     const label = SOCIAL_LABEL[channel] ?? channel;
-    const variants = await generateChannelVariants(brief, input.title, label, n);
+    const variants = await generateChannelVariants(brief, input.title, label, 6, vPerAngle);
     return { channel, budget, asset: { channel, kind: 'social', variants } };
   });
 
