@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo, launchPaidCampaign } from '@/app/actions-campaigns';
+import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo, launchPaidCampaign, suggestCampaignAudiences } from '@/app/actions-campaigns';
+
+type Audience = { name: string; angle?: string; targeting: { countries?: string[]; ageMin?: number; ageMax?: number } };
 
 export type VariantRow = {
   id: string; campaign_asset_id: string; channel: string; angle: string | null;
@@ -96,7 +98,7 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
             {a.status === 'pending'
               ? <p className="text-[13px] text-[var(--ink-secondary)]">ממתין לבנייה…</p>
               : <>
-                  {a.kind === 'social' && <SocialAsset assetId={a.id} variants={rows.filter((v) => v.campaign_asset_id === a.id)} onWinner={pickWinner} />}
+                  {a.kind === 'social' && <SocialAsset assetId={a.id} campaignId={campaign.id} variants={rows.filter((v) => v.campaign_asset_id === a.id)} onWinner={pickWinner} />}
                   {a.kind === 'search_ads' && <RsaAsset payload={a.payload} />}
                   {a.kind === 'seo' && <SeoAsset payload={a.payload} />}
                 </>}
@@ -107,12 +109,14 @@ export default function CampaignDetail({ campaign, assets, variants, pending }: 
   );
 }
 
-function SocialAsset({ assetId, variants, onWinner }: { assetId: string; variants: VariantRow[]; onWinner: (v: VariantRow) => void }) {
+function SocialAsset({ assetId, campaignId, variants, onWinner }: { assetId: string; campaignId: string; variants: VariantRow[]; onWinner: (v: VariantRow) => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<'organic' | 'paid' | 'video'>('organic');
   const [mediaUrl, setMediaUrl] = useState('');
   const [dailyBudget, setDailyBudget] = useState('');
   const [objective, setObjective] = useState('OUTCOME_TRAFFIC');
+  const [audiences, setAudiences] = useState<Audience[]>([]);
+  const [audOn, setAudOn] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [pubNote, setPubNote] = useState<string | null>(null);
   const [pub, setPub] = useState<Set<string>>(new Set(variants.filter((v) => v.published).map((v) => v.id)));
@@ -135,18 +139,30 @@ function SocialAsset({ assetId, variants, onWinner }: { assetId: string; variant
     setPubNote(`✅ פורסמו ${(res as { sent: number }).sent} גרסאות (${modeLabel(mode)}).`);
   }
 
-  // Full Meta paid campaign — Campaign + Ad Set (budget) + an Ad per selected variant.
+  async function suggestAud() {
+    setBusy(true); setPubNote(null);
+    const res = await suggestCampaignAudiences(campaignId, 3);
+    setBusy(false);
+    if ('error' in res && res.error) return setPubNote('שגיאה: ' + res.error);
+    const aud = (res as { audiences: Audience[] }).audiences ?? [];
+    setAudiences(aud);
+    setAudOn(new Set(aud.map((_, i) => i))); // all on by default
+  }
+
+  // Full Meta paid campaign — Campaign + Ad Set per audience (targeting) + Ad per variant.
   async function launchPaid() {
     if (selected.size === 0) return setPubNote('בחר גרסאות לקמפיין הממומן.');
     if (!dailyBudget || Number(dailyBudget) <= 0) return setPubNote('הכנס תקציב יומי.');
-    if (!window.confirm(`להשיק קמפיין ממומן ב-Meta עם ${selected.size} מודעות (A/B), תקציב ₪${dailyBudget}/יום? הקמפיין ייווצר במצב מושהה (PAUSED) — תפעיל ב-Ads Manager.`)) return;
+    const chosen = audiences.filter((_, i) => audOn.has(i));
+    const audText = chosen.length ? `${chosen.length} קהלים` : 'קהל ברירת-מחדל';
+    if (!window.confirm(`להשיק קמפיין ממומן ב-Meta: ${selected.size} מודעות × ${audText}, תקציב ₪${dailyBudget}/יום? ייווצר מושהה (PAUSED) — תפעיל ב-Ads Manager.`)) return;
     setBusy(true); setPubNote(null);
-    const res = await launchPaidCampaign({ assetId, variantIds: [...selected], dailyBudget: Number(dailyBudget), objective });
+    const res = await launchPaidCampaign({ assetId, variantIds: [...selected], dailyBudget: Number(dailyBudget), objective, audiences: chosen.length ? chosen : undefined });
     setBusy(false);
     if ('error' in res && res.error) return setPubNote('שגיאה: ' + res.error);
     setPub((p) => new Set([...p, ...[...selected]]));
     setSelected(new Set());
-    setPubNote(`✅ קמפיין ממומן נוצר ב-Meta (${(res as { ads: number }).ads} מודעות, מושהה). הפעל ב-Ads Manager.`);
+    setPubNote(`✅ קמפיין ממומן נוצר (${(res as { audiences: number }).audiences} קהלים · ${(res as { ads: number }).ads} מודעות, מושהה). הפעל ב-Ads Manager.`);
   }
 
   // Group by angle_index.
@@ -213,6 +229,9 @@ function SocialAsset({ assetId, variants, onWinner }: { assetId: string; variant
             </select>
           </>
         )}
+        {mode === 'paid' && (
+          <button onClick={suggestAud} disabled={busy} className="text-[12px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-3 py-1.5 disabled:opacity-50">👥 הצע קהלים (AI)</button>
+        )}
         {mode === 'paid' ? (
           <button onClick={launchPaid} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
             {busy ? 'משיק…' : '🚀 השק קמפיין ממומן (Meta)'}
@@ -221,6 +240,18 @@ function SocialAsset({ assetId, variants, onWinner }: { assetId: string; variant
           <button onClick={publishSelected} disabled={busy || selected.size === 0} className="text-[12px] font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 disabled:opacity-50">
             {busy ? 'מפרסם…' : `פרסם נבחרים`}
           </button>
+        )}
+        {/* Suggested audiences (#2) — one ad set per selected audience. */}
+        {mode === 'paid' && audiences.length > 0 && (
+          <div className="w-full flex flex-wrap gap-2 mt-1">
+            {audiences.map((a, i) => (
+              <button key={i} onClick={() => setAudOn((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+                className={`text-[11px] rounded-lg px-2.5 py-1 border ${audOn.has(i) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-black/10 text-[var(--ink-secondary)]'}`}
+                title={a.angle}>
+                {a.name} · {a.targeting.ageMin}-{a.targeting.ageMax}
+              </button>
+            ))}
+          </div>
         )}
         {pubNote && <span className="text-[12px] w-full">{pubNote}</span>}
       </div>

@@ -20,66 +20,99 @@ export async function publishPaid(
 // → one Ad per variant creative (A/B). Everything is created **PAUSED** — HELIX
 // never spends money on its own; the user activates in Ads Manager after review.
 export type MetaTargeting = { countries?: string[]; ageMin?: number; ageMax?: number };
+export type MetaAudience = { name: string; targeting: MetaTargeting };
 export type MetaCampaignOpts = {
   name: string;
   objective?: string;        // OUTCOME_TRAFFIC | OUTCOME_LEADS | OUTCOME_AWARENESS | ...
   dailyBudget: number;       // major units (₪); converted to minor for the API
   optimizationGoal?: string; // LINK_CLICKS | REACH | LANDING_PAGE_VIEWS | ...
-  targeting?: MetaTargeting;
+  targeting?: MetaTargeting; // single-audience fallback
+  audiences?: MetaAudience[]; // multi-audience → one ad set per audience (#2)
   link?: string;
   creatives: { message: string; picture?: string }[];
 };
-export type MetaCampaignResult = { ok: boolean; campaignId?: string; adsetId?: string; adIds?: string[]; error?: string };
+export type MetaAdset = { name: string; adsetId: string; adIds: string[] };
+export type MetaCampaignResult = { ok: boolean; campaignId?: string; adsets?: MetaAdset[]; error?: string };
 
-export async function createMetaCampaign(config: ChannelConfig, opts: MetaCampaignOpts): Promise<MetaCampaignResult> {
+function metaClient(config: ChannelConfig) {
   const adAccount = (config.ad_account_id as string | undefined) || process.env.FB_AD_ACCOUNT_ID;
   const token = (config.access_token as string | undefined) || process.env.FB_ADS_TOKEN;
   const pageId = (config.page_id as string | undefined) || process.env.FB_PAGE_ID;
-  if (!adAccount || !token || !pageId) return { ok: false, error: 'meta_ads_not_configured' };
+  if (!adAccount || !token) return null;
   const acct = adAccount.startsWith('act_') ? adAccount : `act_${adAccount}`;
-  const base = `https://graph.facebook.com/v20.0`;
-
+  const base = 'https://graph.facebook.com/v20.0';
   const post = async (path: string, body: Record<string, unknown>) => {
-    const res = await fetch(`${base}/${path}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
-    if (!res.ok || !json.id) throw new Error(json.error?.message || `meta_${res.status}`);
-    return json.id;
+    const res = await fetch(`${base}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const json = (await res.json().catch(() => ({}))) as { id?: string; success?: boolean; error?: { message?: string } };
+    if (!res.ok) throw new Error(json.error?.message || `meta_${res.status}`);
+    return json;
   };
+  return { acct, pageId, post };
+}
+
+export async function createMetaCampaign(config: ChannelConfig, opts: MetaCampaignOpts): Promise<MetaCampaignResult> {
+  const m = metaClient(config);
+  if (!m || !m.pageId) return { ok: false, error: 'meta_ads_not_configured' };
+  const { acct, pageId, post } = m;
+  const postId = async (path: string, body: Record<string, unknown>) => { const j = await post(path, body); if (!j.id) throw new Error('meta_no_id'); return j.id; };
+
+  // Audiences: explicit list, else a single audience from targeting.
+  const audiences: MetaAudience[] = opts.audiences?.length ? opts.audiences : [{ name: opts.name, targeting: opts.targeting ?? {} }];
+  const perAdsetBudget = Math.max(500, Math.round((opts.dailyBudget * 100) / audiences.length)); // minor units, ₪5 floor
 
   try {
-    // 1) Campaign (PAUSED).
-    const campaignId = await post(`${acct}/campaigns`, {
-      name: opts.name, objective: opts.objective || 'OUTCOME_TRAFFIC', status: 'PAUSED', special_ad_categories: [],
-    });
+    const campaignId = await postId(`${acct}/campaigns`, { name: opts.name, objective: opts.objective || 'OUTCOME_TRAFFIC', status: 'PAUSED', special_ad_categories: [] });
 
-    // 2) Ad Set — budget (minor units), targeting, optimization (PAUSED).
-    const t = opts.targeting ?? {};
-    const adsetId = await post(`${acct}/adsets`, {
-      name: `${opts.name} — AdSet`, campaign_id: campaignId,
-      daily_budget: Math.round(opts.dailyBudget * 100),
-      billing_event: 'IMPRESSIONS', optimization_goal: opts.optimizationGoal || 'LINK_CLICKS',
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP', status: 'PAUSED',
-      targeting: { geo_locations: { countries: t.countries ?? ['IL'] }, age_min: t.ageMin ?? 18, age_max: t.ageMax ?? 65 },
-    });
-
-    // 3) One creative + ad per variant → Meta A/B-tests them within the ad set.
-    const adIds: string[] = [];
+    // Reuse one creative per variant across all audiences.
+    const creativeIds: string[] = [];
     for (const c of opts.creatives) {
-      const creativeId = await post(`${acct}/adcreatives`, {
-        name: c.message.slice(0, 40),
-        object_story_spec: { page_id: pageId, link_data: { message: c.message, link: opts.link || 'https://example.com', ...(c.picture ? { picture: c.picture } : {}) } },
-      });
-      const adId = await post(`${acct}/ads`, { name: c.message.slice(0, 40), adset_id: adsetId, creative: { creative_id: creativeId }, status: 'PAUSED' });
-      adIds.push(adId);
+      creativeIds.push(await postId(`${acct}/adcreatives`, { name: c.message.slice(0, 40), object_story_spec: { page_id: pageId, link_data: { message: c.message, link: opts.link || 'https://example.com', ...(c.picture ? { picture: c.picture } : {}) } } }));
     }
 
-    return { ok: true, campaignId, adsetId, adIds };
+    // One Ad Set per audience (its own targeting) → the same A/B creatives inside each.
+    const adsets: MetaAdset[] = [];
+    for (const aud of audiences) {
+      const t = aud.targeting ?? {};
+      const adsetId = await postId(`${acct}/adsets`, {
+        name: `${opts.name} — ${aud.name}`, campaign_id: campaignId, daily_budget: perAdsetBudget,
+        billing_event: 'IMPRESSIONS', optimization_goal: opts.optimizationGoal || 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', status: 'PAUSED',
+        targeting: { geo_locations: { countries: t.countries ?? ['IL'] }, age_min: t.ageMin ?? 18, age_max: t.ageMax ?? 65 },
+      });
+      const adIds: string[] = [];
+      for (let i = 0; i < creativeIds.length; i++) {
+        adIds.push(await postId(`${acct}/ads`, { name: `${aud.name} #${i + 1}`, adset_id: adsetId, creative: { creative_id: creativeIds[i] }, status: 'PAUSED' }));
+      }
+      adsets.push({ name: aud.name, adsetId, adIds });
+    }
+
+    return { ok: true, campaignId, adsets };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
+  }
+}
+
+// Budget-loop primitives (#4): pause an underperforming ad; adjust an ad set budget.
+export async function pauseMetaAd(config: ChannelConfig, adId: string): Promise<boolean> {
+  const m = metaClient(config); if (!m) return false;
+  try { await m.post(adId, { status: 'PAUSED' }); return true; } catch { return false; }
+}
+export async function setMetaAdsetBudget(config: ChannelConfig, adsetId: string, dailyBudgetMajor: number): Promise<boolean> {
+  const m = metaClient(config); if (!m) return false;
+  try { await m.post(adsetId, { daily_budget: Math.round(dailyBudgetMajor * 100) }); return true; } catch { return false; }
+}
+
+// Ad-level insights for the budget loop — impressions + clicks per ad.
+export async function fetchMetaAdInsights(config: ChannelConfig, adId: string): Promise<{ impressions: number; clicks: number } | null> {
+  const token = (config.access_token as string | undefined) || process.env.FB_ADS_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await fetch(`https://graph.facebook.com/v20.0/${adId}/insights?fields=impressions,clicks&access_token=${token}`);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { impressions?: string; clicks?: string }[] };
+    const row = json.data?.[0];
+    return { impressions: parseInt(row?.impressions ?? '0', 10) || 0, clicks: parseInt(row?.clicks ?? '0', 10) || 0 };
+  } catch {
+    return null;
   }
 }
 

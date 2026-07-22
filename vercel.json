@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/variant-metrics",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/budget-optimizer",
+      "schedule": "0 */12 * * *"
     }
   ]
 }

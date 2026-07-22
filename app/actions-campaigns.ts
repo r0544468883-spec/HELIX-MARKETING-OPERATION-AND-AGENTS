@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/server';
 import { generateChannelVariants } from '@/lib/content-agent';
 import { createCampaignShell, buildOneAsset, type CampaignInput } from '@/lib/campaign-run';
 import { sendToChannel } from '@/lib/distribution';
-import { publishPaid, createMetaCampaign, type MetaTargeting } from '@/lib/distribution/paid';
+import { publishPaid, createMetaCampaign, type MetaTargeting, type MetaAudience } from '@/lib/distribution/paid';
 import { fetchInsights } from '@/lib/insights';
+import { suggestAudiences } from '@/lib/audience-agent';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -129,8 +130,23 @@ export async function publishVariants(input: { variantIds: string[]; mode: Publi
 // Launch a FULL Meta paid campaign — one Campaign + Ad Set (budget/targeting) +
 // an Ad per selected variant (A/B). Created PAUSED; the user activates in Ads
 // Manager. Stores the Meta ids on the asset and marks variants published.
+// AI audience segmentation for a campaign (#2) — suggests distinct segments.
+export async function suggestCampaignAudiences(campaignId: string, n = 3) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+  const { data: camp } = await supabase.from('campaigns').select('brief, client_profile').eq('id', campaignId).maybeSingle();
+  const brief = [camp?.brief, JSON.stringify(camp?.client_profile ?? {})].filter(Boolean).join('\n');
+  try {
+    const audiences = await suggestAudiences(brief || 'קמפיין', n);
+    return { ok: true, audiences };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
 export async function launchPaidCampaign(input: {
-  assetId: string; variantIds: string[]; dailyBudget: number; objective?: string; link?: string; targeting?: MetaTargeting;
+  assetId: string; variantIds: string[]; dailyBudget: number; objective?: string; link?: string; targeting?: MetaTargeting; audiences?: MetaAudience[];
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -148,21 +164,23 @@ export async function launchPaidCampaign(input: {
 
   const res = await createMetaCampaign((conn?.config ?? {}) as Record<string, unknown>, {
     name: `HELIX ${new Date().toISOString().slice(0, 10)}`,
-    objective: input.objective, dailyBudget: input.dailyBudget, targeting: input.targeting, link: input.link,
+    objective: input.objective, dailyBudget: input.dailyBudget, targeting: input.targeting, audiences: input.audiences, link: input.link,
     creatives: (variants ?? []).map((v) => ({ message: v.body as string, picture: (v.video_url as string) || undefined })),
   });
   if (!res.ok) return { error: res.error };
 
-  await supabase.from('campaign_assets').update({ paid_campaign: { meta_campaign_id: res.campaignId, adset_id: res.adsetId, ad_ids: res.adIds } }).eq('id', input.assetId);
-  // Map each variant to its ad id for later insights; mark published.
+  await supabase.from('campaign_assets').update({ paid_campaign: { meta_campaign_id: res.campaignId, adsets: res.adsets } }).eq('id', input.assetId);
+  // Map each variant to its ad id (in the FIRST ad set — representative) for insights.
+  const firstAdset = res.adsets?.[0];
   const vlist = variants ?? [];
   for (let i = 0; i < vlist.length; i++) {
-    await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString(), external_id: res.adIds?.[i] ?? null }).eq('id', vlist[i].id);
+    await supabase.from('content_variants').update({ published: true, published_at: new Date().toISOString(), external_id: firstAdset?.adIds?.[i] ?? null }).eq('id', vlist[i].id);
   }
-  await supabase.from('publications').insert({ workspace_id: ws, channel: label, content: `Paid campaign (${res.adIds?.length ?? 0} ads)`, mode: 'paid', status: 'sent', external_id: res.campaignId ?? null, sent_at: new Date().toISOString() });
+  const totalAds = (res.adsets ?? []).reduce((s, a) => s + a.adIds.length, 0);
+  await supabase.from('publications').insert({ workspace_id: ws, channel: label, content: `Paid campaign (${res.adsets?.length ?? 0} audiences, ${totalAds} ads)`, mode: 'paid', status: 'sent', external_id: res.campaignId ?? null, sent_at: new Date().toISOString() });
 
   revalidatePath('/campaigns');
-  return { ok: true, campaignId: res.campaignId, ads: res.adIds?.length ?? 0 };
+  return { ok: true, campaignId: res.campaignId, audiences: res.adsets?.length ?? 0, ads: totalAds };
 }
 
 // Attach a video (from the Video Studio export) to a variant, for video posts.
