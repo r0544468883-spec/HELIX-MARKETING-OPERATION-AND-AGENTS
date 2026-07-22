@@ -18,8 +18,8 @@ export default async function Nav({ locale }: { locale: string }) {
   const L = (p: string) => `/${locale}${p}`;
   const t =
     locale === 'en'
-      ? { requests: 'Requests', vault: 'Vault', brand: 'Brand', channels: 'Channels', marketing: 'Marketing', newRequest: 'New request', login: 'Log in', logout: 'Log out' }
-      : { requests: 'בקשות', vault: 'כספת', brand: 'מותג', channels: 'ערוצים', marketing: 'שיווק', newRequest: 'בקשה חדשה', login: 'התחברות', logout: 'התנתקות' };
+      ? { requests: 'Requests', vault: 'Vault', brand: 'Brand', channels: 'Channels', marketing: 'Marketing', campaigns: 'Campaigns', newRequest: 'New request', login: 'Log in', logout: 'Log out' }
+      : { requests: 'בקשות', vault: 'כספת', brand: 'מותג', channels: 'ערוצים', marketing: 'שיווק', campaigns: 'קמפיינים', newRequest: 'בקשה חדשה', login: 'התחברות', logout: 'התנתקות' };
 
   return (
     <header className="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border">
@@ -38,6 +38,7 @@ export default async function Nav({ locale }: { locale: string }) {
             { href: L('/brand'), label: t.brand, hideSm: true },
             { href: L('/channels'), label: t.channels, hideSm: true },
             { href: L('/attribution'), label: t.marketing, hideSm: true },
+            { href: L('/campaigns'), label: t.campaigns, hideSm: true },
           ]}
         />
 

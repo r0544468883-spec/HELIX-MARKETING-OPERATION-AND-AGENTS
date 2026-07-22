@@ -94,3 +94,51 @@ export async function generateChannelDraft(
 
   return { body, language: cfg.lang, aiScore };
 }
+
+// Distinct-angle A/B variants for one channel. Each variant takes a different
+// persuasion angle so the test is meaningful (not 6 rewordings of the same idea).
+// Returns up to `n` (max 6) variants, each humanized + AI-scored like a draft.
+export type Variant = ChannelDraft & { angle: string; index: number };
+
+const ANGLES: { he: string; en: string }[] = [
+  { he: 'תועלת ישירה (מה הלקוח מרוויח)', en: 'Direct benefit (what the customer gains)' },
+  { he: 'כאב/בעיה (מה כואב בלי הפתרון)', en: 'Pain/problem (what hurts without it)' },
+  { he: 'הוכחה חברתית (מספרים/עדויות)', en: 'Social proof (numbers/testimonials)' },
+  { he: 'דחיפות/הצעה (זמן מוגבל, מבצע)', en: 'Urgency/offer (limited time, deal)' },
+  { he: 'סיפור/רגש (סיטואציה שהקהל מזדהה)', en: 'Story/emotion (a relatable situation)' },
+  { he: 'שאלה/סקרנות (hook פותח)', en: 'Question/curiosity (opening hook)' },
+];
+
+export async function generateChannelVariants(
+  brief: string,
+  title: string,
+  channel: string,
+  n = 6
+): Promise<Variant[]> {
+  const cfg = CHANNEL_GUIDE[channel] ?? { lang: 'he' as Lang, guide: 'תוכן שיווקי קצר וברור.' };
+  const count = Math.max(1, Math.min(6, n));
+
+  // Generate each angle in parallel; each still runs the full draft→humanize→score.
+  const jobs = ANGLES.slice(0, count).map(async (angleDef, index): Promise<Variant> => {
+    const angle = cfg.lang === 'he' ? angleDef.he : angleDef.en;
+    const draftSystem =
+      cfg.lang === 'he'
+        ? `אתה קופירייטר מנוסה. כתוב תוכן שיווקי עבור ${channel} מזווית: "${angle}". ${cfg.guide} כתוב בעברית תקנית ואנושית. החזר אך ורק את התוכן.`
+        : `You are an expert copywriter. Write ${channel} content from this angle: "${angle}". ${cfg.guide} Return only the content.`;
+    let body = await claude(draftSystem, `כותרת: ${title}\nבריף: ${brief}`);
+    if (cfg.lang === 'he') {
+      body = await claude(
+        'אתה עורך עברית. שכתב שיישמע אנושי-ישראלי טבעי (לא כמו AI) ותקן שגיאות. שמור משמעות/טון/אורך. החזר רק את הטקסט.',
+        body
+      );
+    }
+    const scoreRaw = await claude(
+      cfg.lang === 'he' ? 'דרג 0-100 עד כמה הטקסט אנושי (100) מול AI (0). החזר רק מספר.' : 'Rate 0-100 how human this reads. Return only a number.',
+      body, 10
+    );
+    const aiScore = Math.max(0, Math.min(100, parseInt(scoreRaw.replace(/\D/g, ''), 10) || 0));
+    return { body, language: cfg.lang, aiScore, angle, index };
+  });
+
+  return Promise.all(jobs);
+}
