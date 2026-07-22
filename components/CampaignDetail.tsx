@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { setVariantWinner, buildNextAsset, publishVariants, autoPickWinner, syncCampaignMetrics, setVariantVideo, launchPaidCampaign, suggestCampaignAudiences } from '@/app/actions-campaigns';
+import { generateVariantAvatar } from '@/app/actions-avatar';
 
 type Audience = { name: string; angle?: string; targeting: { countries?: string[]; ageMin?: number; ageMax?: number } };
 
@@ -195,6 +196,7 @@ function SocialAsset({ assetId, campaignId, variants, onWinner }: { assetId: str
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-[11px] text-[var(--ink-secondary)]">אנושיות: {v.ai_score}/100 {pub.has(v.id) && <span className="text-emerald-600 font-bold">· פורסם ✓</span>} {v.video_url && <span title={v.video_url}>· 🎬</span>}</span>
                   <div className="flex gap-1">
+                    <AvatarButton variantId={v.id} />
                     <VideoAttach variantId={v.id} current={v.video_url ?? null} />
                     <button onClick={() => onWinner(v)} className={`text-[11px] font-bold rounded-lg px-2.5 py-1 ${v.is_winner ? 'bg-emerald-600 text-white' : 'bg-black/5 hover:bg-black/10'}`}>
                       {v.is_winner ? '★ מנצח' : 'סמן מנצח'}
@@ -261,6 +263,27 @@ function SocialAsset({ assetId, campaignId, variants, onWinner }: { assetId: str
 
 function modeLabel(m: 'organic' | 'paid' | 'video'): string {
   return m === 'organic' ? 'תוכן אורגני' : m === 'paid' ? 'ממומן' : 'סרטון';
+}
+
+// Generate an avatar video for the variant IN-SYSTEM (HeyGen/D-ID, hybrid BYOK).
+function AvatarButton({ variantId }: { variantId: string }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function gen(provider: 'heygen' | 'did') {
+    setBusy(true); setNote(null);
+    const res = await generateVariantAvatar({ variantId, provider });
+    setBusy(false); setOpen(false);
+    setNote('error' in res && res.error ? (res.error === 'avatar_key_missing' ? 'חבר מפתח HeyGen/D-ID' : 'שגיאה: ' + res.error) : 'בהפקה…');
+  }
+  if (note) return <span className="text-[11px] text-[var(--ink-secondary)]">{note}</span>;
+  if (!open) return <button onClick={() => setOpen(true)} className="text-[11px] font-bold rounded-lg bg-black/5 hover:bg-black/10 px-2.5 py-1" title="צור אווטאר AI">🧑</button>;
+  return (
+    <span className="flex gap-1">
+      <button disabled={busy} onClick={() => gen('heygen')} className="text-[11px] font-bold rounded bg-emerald-600 text-white px-2 py-1">HeyGen</button>
+      <button disabled={busy} onClick={() => gen('did')} className="text-[11px] font-bold rounded bg-black/70 text-white px-2 py-1">D-ID</button>
+    </span>
+  );
 }
 
 // Attach a video (produced in the Video Studio) to a variant, for video posts.

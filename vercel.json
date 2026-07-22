@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/budget-optimizer",
       "schedule": "0 */12 * * *"
+    },
+    {
+      "path": "/api/cron/avatar-poll",
+      "schedule": "*/2 * * * *"
     }
   ]
 }
