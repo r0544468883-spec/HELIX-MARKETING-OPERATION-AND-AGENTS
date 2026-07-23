@@ -63,7 +63,7 @@ export async function handleBotMessage(input: { channel: BotChannel; identifier:
   }
   // WhatsApp template catalog.
   if (t.includes('תבנית') || t.includes('תבניות') || t.includes('template')) {
-    return templatesCommand();
+    return templatesCommand(ws);
   }
 
   // Audience segmentation.

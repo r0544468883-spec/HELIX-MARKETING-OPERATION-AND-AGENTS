@@ -11,6 +11,7 @@ import { LANDING_TEMPLATES, templatesForVertical } from '../landing/templates';
 import { fillLandingContent } from '../landing/generate';
 import { installStarterFunnels } from '../engagement/funnel-catalog';
 import { TEMPLATES } from '../templates/whatsapp-catalog';
+import { mergedWhatsAppTemplates } from '../templates/custom';
 
 type Admin = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -159,12 +160,18 @@ export async function installFunnelsCommand(admin: Admin, ws: string): Promise<s
 
 // #8 — Templates: list the WhatsApp template catalog (name + category) so the
 // operator can reach the templates from the bot, not only from the system UI.
-export async function templatesCommand(): Promise<string> {
-  const entries = Object.values(TEMPLATES);
+// Includes the workspace's custom (uploaded) templates, marked with "*".
+export async function templatesCommand(ws?: string): Promise<string> {
+  const merged = ws ? await mergedWhatsAppTemplates(ws) : { ...TEMPLATES };
+  const entries = Object.entries(merged);
   if (!entries.length) return 'אין תבניות WhatsApp מוגדרות.';
   const label: Record<string, string> = { UTILITY: 'תפעולי', MARKETING: 'שיווקי' };
-  const lines = entries.map((t) => `• ${t.name} [${label[t.category] ?? t.category}] — ${t.body}`);
-  return ['📋 קטלוג תבניות WhatsApp:', ...lines].join('\n');
+  const lines = entries.map(([key, t]) => {
+    // A key is custom if it isn't a built-in, or its def was overridden (ref differs).
+    const isCustom = merged[key] !== TEMPLATES[key];
+    return `${isCustom ? '*' : '•'} ${t.name} [${label[t.category] ?? t.category}] — ${t.body}`;
+  });
+  return ['📋 קטלוג תבניות WhatsApp (* = מותאם אישית):', ...lines].join('\n');
 }
 
 // #4b — Paid campaign publish / pause from the bot.

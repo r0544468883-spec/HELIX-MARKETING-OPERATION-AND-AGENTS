@@ -7,7 +7,8 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createWhatsAppTemplate } from '@/lib/distribution/whatsapp';
-import { allRegistrationPayloads } from '@/lib/templates/whatsapp-catalog';
+import { registrationPayloadsFor } from '@/lib/templates/whatsapp-catalog';
+import { mergedWhatsAppTemplates } from '@/lib/templates/custom';
 import type { ChannelConfig } from '@/lib/distribution/types';
 
 export const dynamic = 'force-dynamic';
@@ -36,8 +37,10 @@ export async function POST(req: Request) {
   if (!wabaId) return NextResponse.json({ error: 'waba_id missing in channel_connections config (add it to register templates)' }, { status: 400 });
 
   const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_SITE_URL || '';
+  // Register built-in ∪ this workspace's custom WhatsApp templates.
+  const merged = Object.values(await mergedWhatsAppTemplates(workspaceId));
   const results: { name: unknown; ok: boolean; status?: string; error?: string }[] = [];
-  for (const payload of allRegistrationPayloads(appUrl)) {
+  for (const payload of registrationPayloadsFor(merged, appUrl)) {
     const r = await createWhatsAppTemplate(config, wabaId, payload);
     results.push({ name: payload.name, ok: r.ok, status: r.status, error: r.error });
   }
