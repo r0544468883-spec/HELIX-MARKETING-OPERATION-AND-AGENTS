@@ -3,7 +3,7 @@
 // chat→workspace link, detects intent, executes, returns a reply string.
 import { createAdminClient } from '../supabase/admin';
 import { campaignFromText } from './campaign-bot';
-import { audienceCommand, budgetCommand, landingCommand, avatarCommand, insightsCommand, paidCommand } from './ops-commands';
+import { audienceCommand, budgetCommand, landingCommand, avatarCommand, insightsCommand, paidCommand, funnelsCommand, installFunnelsCommand, templatesCommand } from './ops-commands';
 
 export type BotChannel = 'telegram' | 'whatsapp' | 'email';
 
@@ -17,6 +17,9 @@ const HELP = [
   '• "אווטאר: <תסריט>" — הפקת סרטון דובר',
   '• "ביצועים" / "תובנות" — סיכום חשיפות, קליקים ו-CTR',
   '• "פרסם ממומן תקציב <סכום>" / "השהה ממומן" — קמפיין Meta ממומן',
+  '• "פאנלים" — רשימת התגובות האוטומטיות (comment→DM) הפעילות',
+  '• "התקן פאנלים" — התקנת קטלוג מוכן של פאנלים לטריגרים נפוצים',
+  '• "תבניות" — קטלוג תבניות ה-WhatsApp',
   'כל פונקציה במערכת נגישה גם מכאן.',
 ].join('\n');
 
@@ -49,6 +52,18 @@ export async function handleBotMessage(input: { channel: BotChannel; identifier:
   }
   if (/(פרסם|הפעל|publish|launch).*(ממומן|paid)|(ממומן|paid).*(פרסם|הפעל|publish|launch)/i.test(text)) {
     return paidCommand(admin, ws, text, 'publish');
+  }
+
+  // Comment funnels — install FIRST (its text also contains "פאנלים"/"funnels").
+  if (/(התקן|הוסף|install|seed).*(פאנל|funnel)|(פאנל|funnel).*(התקן|install)/i.test(text)) {
+    return installFunnelsCommand(admin, ws);
+  }
+  if (t.includes('פאנל') || t.includes('funnel') || t.includes('תגובות אוטומטיות')) {
+    return funnelsCommand(admin, ws);
+  }
+  // WhatsApp template catalog.
+  if (t.includes('תבנית') || t.includes('תבניות') || t.includes('template')) {
+    return templatesCommand();
   }
 
   // Audience segmentation.

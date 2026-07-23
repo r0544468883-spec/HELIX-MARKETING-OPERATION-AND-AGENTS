@@ -9,6 +9,8 @@ import { createMetaCampaign } from '../distribution/paid';
 import { resolveAvatarKey, submitAvatar } from '../avatar';
 import { LANDING_TEMPLATES, templatesForVertical } from '../landing/templates';
 import { fillLandingContent } from '../landing/generate';
+import { installStarterFunnels } from '../engagement/funnel-catalog';
+import { TEMPLATES } from '../templates/whatsapp-catalog';
 
 type Admin = NonNullable<ReturnType<typeof createAdminClient>>;
 
@@ -123,6 +125,46 @@ export async function insightsCommand(admin: Admin, ws: string): Promise<string>
     `• קליקים: ${clicks.toLocaleString('he-IL')} (CTR ${ctr}%)`,
     top ? `• ערוץ מוביל: ${top[0]}` : '',
   ].filter(Boolean).join('\n');
+}
+
+// #7 — Comment funnels: list the workspace's active comment→DM funnels so the
+// operator sees which trigger words are wired and what each replies publicly.
+export async function funnelsCommand(admin: Admin, ws: string): Promise<string> {
+  const { data: funnels } = await admin
+    .from('comment_funnels')
+    .select('keyword, public_reply_text, active, channel')
+    .eq('workspace_id', ws)
+    .eq('active', true)
+    .order('keyword', { ascending: true })
+    .limit(50);
+  if (!funnels?.length) {
+    return 'אין עדיין תגובות אוטומטיות (פאנלים) פעילות. כתוב/כתבי "התקן פאנלים" כדי להתקין קטלוג מוכן של טריגרים נפוצים.';
+  }
+  const lines = funnels.map((f) => `• "${f.keyword as string}" → ${f.public_reply_text as string}`);
+  return ['💬 תגובות אוטומטיות פעילות (טריגר → תגובה ציבורית):', ...lines, '\nלהוספת קטלוג מוכן: "התקן פאנלים".'].join('\n');
+}
+
+// #7b — Install the ready-made starter funnel catalog into this workspace.
+export async function installFunnelsCommand(admin: Admin, ws: string): Promise<string> {
+  try {
+    const { installed, skipped, total } = await installStarterFunnels(admin, ws);
+    if (installed === 0) {
+      return `כל ${total} הפאנלים מהקטלוג כבר מותקנים אצלך — לא נוסף כלום. כתוב/כתבי "פאנלים" לרשימה.`;
+    }
+    return `✅ הותקנו ${installed} פאנלים מוכנים${skipped ? ` (${skipped} כבר היו קיימים)` : ''}. כתוב/כתבי "פאנלים" לרשימה המלאה.`;
+  } catch (e) {
+    return 'שגיאה בהתקנת הפאנלים: ' + (e instanceof Error ? e.message : 'לא ידועה');
+  }
+}
+
+// #8 — Templates: list the WhatsApp template catalog (name + category) so the
+// operator can reach the templates from the bot, not only from the system UI.
+export async function templatesCommand(): Promise<string> {
+  const entries = Object.values(TEMPLATES);
+  if (!entries.length) return 'אין תבניות WhatsApp מוגדרות.';
+  const label: Record<string, string> = { UTILITY: 'תפעולי', MARKETING: 'שיווקי' };
+  const lines = entries.map((t) => `• ${t.name} [${label[t.category] ?? t.category}] — ${t.body}`);
+  return ['📋 קטלוג תבניות WhatsApp:', ...lines].join('\n');
 }
 
 // #4b — Paid campaign publish / pause from the bot.
