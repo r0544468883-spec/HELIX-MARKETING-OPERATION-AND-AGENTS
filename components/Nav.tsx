@@ -18,8 +18,8 @@ export default async function Nav({ locale }: { locale: string }) {
   const L = (p: string) => `/${locale}${p}`;
   const t =
     locale === 'en'
-      ? { requests: 'Requests', vault: 'Vault', brand: 'Brand', channels: 'Channels', marketing: 'Marketing', campaigns: 'Campaigns', landing: 'Landing', newRequest: 'New request', login: 'Log in', logout: 'Log out' }
-      : { requests: 'בקשות', vault: 'כספת', brand: 'מותג', channels: 'ערוצים', marketing: 'שיווק', campaigns: 'קמפיינים', landing: 'דפי נחיתה', newRequest: 'בקשה חדשה', login: 'התחברות', logout: 'התנתקות' };
+      ? { requests: 'Requests', vault: 'Vault', brand: 'Brand', channels: 'Channels', marketing: 'Marketing', campaigns: 'Campaigns', landing: 'Landing', templates: 'Templates', newRequest: 'New request', login: 'Log in', logout: 'Log out' }
+      : { requests: 'בקשות', vault: 'כספת', brand: 'מותג', channels: 'ערוצים', marketing: 'שיווק', campaigns: 'קמפיינים', landing: 'דפי נחיתה', templates: 'תבניות', newRequest: 'בקשה חדשה', login: 'התחברות', logout: 'התנתקות' };
 
   return (
     <header className="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border">
@@ -40,6 +40,7 @@ export default async function Nav({ locale }: { locale: string }) {
             { href: L('/attribution'), label: t.marketing, hideSm: true },
             { href: L('/campaigns'), label: t.campaigns, hideSm: true },
             { href: L('/landing'), label: t.landing, hideSm: true },
+            { href: L('/templates'), label: t.templates, hideSm: true },
           ]}
         />
 
