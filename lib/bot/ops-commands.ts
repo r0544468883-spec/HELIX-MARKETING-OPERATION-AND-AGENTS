@@ -205,3 +205,57 @@ export async function paidCommand(admin: Admin, ws: string, text: string, action
   const totalAds = (res.adsets ?? []).reduce((s, a) => s + a.adIds.length, 0);
   return `📣 קמפיין ממומן נוצר (מושהה לאישור): ${res.adsets?.length ?? 0} קהלים, ${totalAds} מודעות, תקציב ₪${budget}/יום. הפעל/י ב-Ads Manager אחרי בדיקה.`;
 }
+
+// ── Coach (content / presence scoring) ────────────────────────────────────────
+import { scoreContent } from '../coach/content-coach';
+import { scorePresence } from '../coach/presence-score';
+import type { ContentChannel, PresenceChannel } from '../coach/rubrics';
+
+function detectContentChannel(t: string): ContentChannel {
+  const s = t.toLowerCase();
+  if (s.includes('מייל') || s.includes('email')) return 'email';
+  if (s.includes('קבוצה') || s.includes('group')) return 'facebook_group';
+  if (s.includes('עמוד עסקי') && s.includes('פייסבוק')) return 'facebook_page';
+  if (s.includes('עמוד') && s.includes('פייסבוק')) return 'facebook_page';
+  if (s.includes('פייסבוק') || s.includes('facebook')) return 'facebook_profile';
+  if (s.includes('עמוד חברה') || s.includes('company')) return 'linkedin_company';
+  if (s.includes('אינסטגרם') || s.includes('instagram')) return 'instagram';
+  return 'linkedin';
+}
+function detectPresenceChannel(t: string): PresenceChannel {
+  const s = t.toLowerCase();
+  if (s.includes('מייל') || s.includes('שולח') || s.includes('deliver')) return 'email_sender';
+  if (s.includes('עמוד חברה') || s.includes('company')) return 'linkedin_company';
+  if (s.includes('עמוד') && s.includes('פייסבוק')) return 'facebook_page';
+  if (s.includes('פייסבוק') || s.includes('facebook')) return 'facebook_profile';
+  if (s.includes('עסקי') && s.includes('אינסטגרם')) return 'instagram_business';
+  if (s.includes('אינסטגרם') || s.includes('instagram')) return 'instagram_profile';
+  return 'linkedin';
+}
+function afterColon(text: string): string {
+  const i = text.indexOf(':');
+  return i >= 0 ? text.slice(i + 1).trim() : '';
+}
+
+export async function coachContentCommand(text: string): Promise<string> {
+  const body = afterColon(text);
+  if (!body) return 'פורמט: "דרג <ערוץ>: <הטיוטה>" — למשל "דרג לינקדאין: הפוסט שלי...".';
+  const channel = detectContentChannel(text);
+  try {
+    const r = await scoreContent({ channel, draft: body });
+    const top = r.dimensions.slice().sort((a, b) => a.score - b.score).slice(0, 2);
+    const lines = top.map((d) => `• ${d.label} (${d.score}/10): ${d.fixes[0] ?? d.findings}`);
+    return [`📊 ${r.channelLabel} — ציון ${r.overall}/100`, r.summary, ...(r.bestTime.suggestion ? [`🕒 ${r.bestTime.suggestion}`] : []), '', 'לשיפור:', ...lines, '', 'לניסוח משופר מלא — פתח/י את "מאמן" במערכת.'].join('\n');
+  } catch (e) { return 'שגיאה בדירוג: ' + (e instanceof Error ? e.message : 'לא ידועה'); }
+}
+
+export async function coachPresenceCommand(text: string): Promise<string> {
+  const body = afterColon(text);
+  if (!body) return 'פורמט: "אבחן פרופיל <ערוץ>: <פרטי הפרופיל>".';
+  const channel = detectPresenceChannel(text);
+  try {
+    const r = await scorePresence({ channel, profile: body });
+    const fixes = (r.topFixes.length ? r.topFixes : r.criteria.slice().sort((a, b) => a.score - b.score).slice(0, 3).map((c) => c.fixes[0] ?? c.label)).slice(0, 4);
+    return [`🔎 ${r.channelLabel} — ציון ${r.overall}/100`, r.summary, '', 'לשיפור:', ...fixes.map((f) => `• ${f}`)].join('\n');
+  } catch (e) { return 'שגיאה באבחון: ' + (e instanceof Error ? e.message : 'לא ידועה'); }
+}

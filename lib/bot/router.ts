@@ -3,7 +3,7 @@
 // chat→workspace link, detects intent, executes, returns a reply string.
 import { createAdminClient } from '../supabase/admin';
 import { campaignFromText } from './campaign-bot';
-import { audienceCommand, budgetCommand, landingCommand, avatarCommand, insightsCommand, paidCommand, funnelsCommand, installFunnelsCommand, templatesCommand } from './ops-commands';
+import { audienceCommand, budgetCommand, landingCommand, avatarCommand, insightsCommand, paidCommand, funnelsCommand, installFunnelsCommand, templatesCommand, coachContentCommand, coachPresenceCommand } from './ops-commands';
 
 export type BotChannel = 'telegram' | 'whatsapp' | 'email';
 
@@ -20,6 +20,8 @@ const HELP = [
   '• "פאנלים" — רשימת התגובות האוטומטיות (comment→DM) הפעילות',
   '• "התקן פאנלים" — התקנת קטלוג מוכן של פאנלים לטריגרים נפוצים',
   '• "תבניות" — קטלוג תבניות ה-WhatsApp',
+  '• "דרג לינקדאין: <טיוטה>" — ציון תוכן לפני פרסום (כל ערוץ)',
+  '• "אבחן פרופיל לינקדאין: <פרטים>" — ציון נוכחות 0-100',
   'כל פונקציה במערכת נגישה גם מכאן.',
 ].join('\n');
 
@@ -67,6 +69,13 @@ export async function handleBotMessage(input: { channel: BotChannel; identifier:
   }
 
   // Audience segmentation.
+  // Coach — score a draft (content) or audit a profile (presence).
+  if (t.includes('אבחן פרופיל') || t.includes('ציון נוכחות') || t.includes('ציון פרופיל')) {
+    return coachPresenceCommand(text);
+  }
+  if (t.startsWith('דרג') || t.includes('ציון תוכן') || t.includes('דרג פוסט') || t.includes('דרג טיוטה')) {
+    return coachContentCommand(text);
+  }
   if (t.includes('קהל') || t.includes('סגמנט') || t.includes('audience') || t.includes('segment')) {
     return audienceCommand(admin, ws, text);
   }
