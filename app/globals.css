@@ -86,9 +86,11 @@ select:focus-visible,
   .animate-float { animation: none; }
 }
 
-/* Neon glow על CTA ראשי — חתימת HELIX (מתוך EFFECTS.md §22) */
+/* דיאטת אפקטים (מגילת אפקטי HELIX): ה-glow היה על כל כפתור ראשי ⇒ אף אחד
+   לא בלט. הונמך מ"ניאון" ל"הרמה עדינה" (60 נק'). הקונפטי באישור/פרסום נשאר
+   הגיבור היחיד (120 נק'). */
 .glow:hover {
-  box-shadow: 0 0 24px rgba(22, 255, 171, 0.35);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.20);
 }
 
 /* אינדיקטור "הסוכן כותב" — נקודות קופצות (מתוך ai-dot-bounce ב-EFFECTS.md §20.7) */
@@ -111,12 +113,12 @@ select:focus-visible,
   .typing-dot { animation: none; }
 }
 
-/* neon glow לכפתורי CTA ראשיים ב-hover (§6/§22) */
+/* דיאטת אפקטים: הרמה עדינה במקום ניאון (ראה הערה ב-.glow למעלה) */
 .cta-glow {
   transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .cta-glow:hover {
-  box-shadow: 0 0 24px rgba(22, 255, 171, 0.35);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.20);
 }
 
 /* hover אחיד לכרטיסים: border→brand + הרמה עדינה (§8) */
