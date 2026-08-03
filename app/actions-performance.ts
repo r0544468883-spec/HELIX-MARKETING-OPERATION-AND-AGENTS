@@ -2,9 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { runWorkspace, type PerfSettings } from '@/lib/performance/engine';
-import { pauseMetaAd } from '@/lib/distribution/paid';
-import type { ChannelConfig } from '@/lib/distribution/types';
+import { runWorkspace, launchCreativeOnPlatform, type PerfSettings } from '@/lib/performance/engine';
+import { getConnector, type ChannelConfig, type AdRef } from '@/lib/performance/connectors';
 import type { Metric } from '@/lib/performance/scoring';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
@@ -73,8 +72,11 @@ export async function setCreativeStatus(id: string, status: 'draft' | 'live' | '
   if ('error' in a) return a;
   const { error } = await a.supabase.from('creatives').update({ status, updated_at: new Date().toISOString() }).eq('id', id).eq('workspace_id', a.ws);
   if (error) return { error: error.message };
+  // Going live in connector mode → upload it to the platform (best-effort; never blocks).
+  let uploaded = false;
+  if (status === 'live') uploaded = await launchCreativeOnPlatform(a.supabase, a.ws, id);
   revalidate();
-  return { ok: true };
+  return { ok: true, uploaded };
 }
 
 // ── Settings ──
@@ -128,11 +130,13 @@ export async function resolveDecision(id: string, approve: boolean) {
   if (action === 'pause' && dec.creative_id) {
     const { data: settings } = await a.supabase.from('performance_settings').select('execution_mode').eq('workspace_id', a.ws).maybeSingle();
     const { data: c } = await a.supabase.from('creatives').select('platform, external_ref').eq('id', dec.creative_id).maybeSingle();
+    // Connector mode → also pause on the actual platform (any supported: Meta/TikTok/Google/Outbrain).
     if (settings?.execution_mode === 'connector' && c) {
-      const ref = (c.external_ref as { adId?: string }) ?? {};
-      if (ref.adId) {
-        const { data: conn } = await a.supabase.from('channel_connections').select('config').eq('workspace_id', a.ws).eq('channel', c.platform).maybeSingle();
-        if (conn?.config) await pauseMetaAd(conn.config as ChannelConfig, ref.adId);
+      const conn = getConnector(c.platform as string);
+      const ref = (c.external_ref as AdRef) ?? {};
+      if (conn) {
+        const { data: cc } = await a.supabase.from('channel_connections').select('config').eq('workspace_id', a.ws).eq('channel', c.platform).maybeSingle();
+        if (cc?.config) await conn.pauseAd(cc.config as ChannelConfig, ref);
       }
     }
     await a.supabase.from('creatives').update({ status: 'paused' }).eq('id', dec.creative_id).eq('workspace_id', a.ws);

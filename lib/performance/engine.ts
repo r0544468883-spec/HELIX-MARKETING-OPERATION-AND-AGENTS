@@ -10,8 +10,7 @@ import {
   ZERO_METRICS,
 } from './scoring';
 import { coldStartScore } from './cold-start';
-import { pauseMetaAd, setMetaAdsetBudget } from '../distribution/paid';
-import type { ChannelConfig } from '../distribution/types';
+import { getConnector, type AdRef, type ChannelConfig } from './connectors';
 
 // The performance loop. Loads the creative pool + latest live metrics, scores every
 // creative with the Bayesian blend (cold-start prior + client-baseline-normalized
@@ -46,7 +45,7 @@ export type CreativeRow = {
   body: string | null;
   hook: string | null;
   media_url: string | null;
-  external_ref: { adId?: string; adsetId?: string } | null;
+  external_ref: AdRef | null;
   status: 'draft' | 'live' | 'paused' | 'retired';
   cold_start: number | null;
   cold_reason: string | null;
@@ -163,11 +162,100 @@ export async function scoreWorkspace(db: DB, workspaceId: string): Promise<{ set
 }
 
 /**
- * Full loop: score → record actionable decisions. In connector + autopilot it also
- * applies them to the ad platform (Meta today). In brain mode, or connector+approve,
- * decisions are left 'pending' for a human. Returns a summary.
+ * Connector-mode launch: upload a pool creative to its platform and persist the
+ * returned platform ids on external_ref (so later pause/scale/insights can target it).
+ * No-op success in brain mode or when unconfigured — going live shouldn't be blocked
+ * by connectivity the client may handle on their own side. Returns whether an upload
+ * actually happened.
+ */
+export async function launchCreativeOnPlatform(db: DB, workspaceId: string, creativeId: string): Promise<boolean> {
+  const settings = await getSettings(db, workspaceId);
+  if (settings.execution_mode !== 'connector') return false;
+
+  const { data: c } = await db
+    .from('creatives')
+    .select('id, name, platform, headline, body, media_url, external_ref')
+    .eq('id', creativeId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+  if (!c) return false;
+  const conn = getConnector(c.platform as string);
+  if (!conn) return false;
+  // Already uploaded? don't duplicate.
+  const ref = (c.external_ref as AdRef) ?? {};
+  if (ref.adId || ref.promotedLinkId) return false;
+
+  const { data: cc } = await db.from('channel_connections').select('config').eq('workspace_id', workspaceId).eq('channel', c.platform).maybeSingle();
+  if (!cc?.config) return false;
+
+  const res = await conn.uploadCreative(cc.config as ChannelConfig, {
+    name: c.name as string,
+    platform: c.platform as string,
+    headline: (c.headline as string) ?? undefined,
+    body: (c.body as string) ?? undefined,
+    mediaUrl: (c.media_url as string) ?? undefined,
+  });
+  if (!res.ok) return false;
+  await db.from('creatives').update({ external_ref: { ...ref, ...(res.ref ?? {}) }, updated_at: new Date().toISOString() }).eq('id', creativeId);
+  return true;
+}
+
+/**
+ * Connector-mode data pull: for every creative with a supported connector + channel
+ * config, read live stats through the platform API and store a fresh metrics snapshot.
+ * In brain mode the client pushes metrics to /api/performance/metrics instead. Returns
+ * how many creatives got a fresh snapshot.
+ */
+export async function pullConnectorMetrics(db: DB, workspaceId: string): Promise<number> {
+  const { data } = await db
+    .from('creatives')
+    .select('id, platform, external_ref')
+    .eq('workspace_id', workspaceId)
+    .neq('status', 'retired');
+  const creatives = (data ?? []) as { id: string; platform: string; external_ref: AdRef | null }[];
+
+  const configCache = new Map<string, ChannelConfig | null>();
+  const getConfig = async (platform: string): Promise<ChannelConfig | null> => {
+    if (configCache.has(platform)) return configCache.get(platform)!;
+    const { data: c } = await db.from('channel_connections').select('config').eq('workspace_id', workspaceId).eq('channel', platform).maybeSingle();
+    const cfg = (c?.config as ChannelConfig) ?? null;
+    configCache.set(platform, cfg);
+    return cfg;
+  };
+
+  let n = 0;
+  for (const c of creatives) {
+    const conn = getConnector(c.platform);
+    if (!conn) continue;
+    const cfg = await getConfig(c.platform);
+    if (!cfg) continue;
+    const ins = await conn.fetchInsights(cfg, c.external_ref ?? {});
+    if (!ins) continue;
+    await db.from('creative_metrics').insert({
+      workspace_id: workspaceId,
+      creative_id: c.id,
+      platform: c.platform,
+      spend: ins.spend ?? 0,
+      impressions: ins.impressions,
+      clicks: ins.clicks,
+      conversions: ins.conversions ?? 0,
+      revenue: ins.revenue ?? 0,
+    });
+    n++;
+  }
+  return n;
+}
+
+/**
+ * Full loop: (connector mode) pull fresh metrics → score → record actionable decisions.
+ * In connector + autopilot it also applies pause/scale to the ad platform. In brain
+ * mode, or connector+approve, decisions are left 'pending' for a human. Returns a summary.
  */
 export async function runWorkspace(db: DB, workspaceId: string): Promise<{ scored: ScoredCreative[]; recorded: number; applied: number }> {
+  // Auto-pull live stats through connectors before scoring (connector mode only).
+  const pre = await getSettings(db, workspaceId);
+  if (pre.execution_mode === 'connector') await pullConnectorMetrics(db, workspaceId);
+
   const { settings, scored } = await scoreWorkspace(db, workspaceId);
   const autopilot = settings.execution_mode === 'connector' && settings.autonomy === 'autopilot';
 
@@ -192,19 +280,21 @@ export async function runWorkspace(db: DB, workspaceId: string): Promise<{ score
 
     if (willApply) {
       const cfg = await getConfig(s.creative.platform);
+      const conn = getConnector(s.creative.platform);
       const ref = s.creative.external_ref ?? {};
-      if (cfg && s.action === 'pause' && ref.adId) {
-        if (await pauseMetaAd(cfg, ref.adId)) {
+      if (cfg && conn && s.action === 'pause') {
+        if (await conn.pauseAd(cfg, ref)) {
           await db.from('creatives').update({ status: 'paused' }).eq('id', s.creative.id);
           status = 'applied';
           applied++;
         }
-      } else if (cfg && s.action === 'scale_up' && ref.adsetId) {
-        // Nudge the ad set budget +25% (bounded by the platform's own caps upstream).
-        // Current budget isn't tracked here yet, so this is a signal-only apply until
-        // budget state lands; record as applied when the platform call succeeds.
-        // (Left as pending if we can't read current budget — safer than guessing.)
-        status = 'pending';
+      } else if (cfg && conn && s.action === 'scale_up' && ref.dailyBudget) {
+        // Scale the winner +25% off its last-known daily budget. If we don't have a
+        // budget on the ref, we leave it pending (a human sets/approves) rather than guess.
+        if (await conn.setBudget(cfg, ref, Math.round(ref.dailyBudget * 1.25))) {
+          status = 'applied';
+          applied++;
+        }
       }
     }
 
@@ -223,5 +313,3 @@ export async function runWorkspace(db: DB, workspaceId: string): Promise<{ score
 
   return { scored, recorded, applied };
 }
-
-export { setMetaAdsetBudget };
