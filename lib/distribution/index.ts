@@ -25,6 +25,7 @@ import { sendTikTok } from './tiktok';
 import { sendYouTube } from './youtube';
 import { sendNostr } from './nostr';
 import { sendTwitch, sendKick, sendMeWe, sendDribbble } from './unsupported';
+import { sendHeadless } from './headless';
 
 // All 29 channels with a native adapter. Text-ready ones work with just a token/webhook;
 // media ones (Pinterest/Instagram = image, TikTok/YouTube = video) need a media URL;
@@ -34,7 +35,7 @@ export const SUPPORTED_CHANNELS = [
   'Discord', 'Slack', 'Mastodon', 'Bluesky', 'Threads', 'Reddit', 'Dev.to',
   'Medium', 'WordPress', 'Hashnode', 'Pinterest', 'Google My Business',
   'Warpcast', 'Lemmy', 'VK', 'TikTok', 'YouTube', 'Nostr',
-  'Twitch', 'Kick', 'MeWe', 'Dribbble',
+  'Twitch', 'Kick', 'MeWe', 'Dribbble', 'Headless',
 ] as const;
 
 export async function sendToChannel(
@@ -72,6 +73,7 @@ export async function sendToChannel(
     case 'Kick': return sendKick(config, content);
     case 'MeWe': return sendMeWe(config, content);
     case 'Dribbble': return sendDribbble(config, content);
+    case 'Headless': return sendHeadless(config, content);
     default: return { ok: false, error: 'channel_not_supported' };
   }
 }

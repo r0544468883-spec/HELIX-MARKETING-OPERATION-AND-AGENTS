@@ -21,7 +21,8 @@ export type FeatureId =
   | 'landing'
   | 'templates'
   | 'coach'
-  | 'performance';
+  | 'performance'
+  | 'developer';
 
 export type Locale = 'he' | 'en';
 
@@ -49,6 +50,8 @@ export const FEATURES: FeatureDef[] = [
   { id: 'coach',      path: '/coach',       label: { he: 'מאמן',      en: 'Coach' },      defaultOn: true, hideSm: true },
   // New module — OFF by default so existing workspaces don't suddenly see it.
   { id: 'performance', path: '/performance', label: { he: 'פרפורמנס', en: 'Performance' }, defaultOn: false, hideSm: true },
+  // Developer API (headless / Pull-ISR distribution) — OFF by default.
+  { id: 'developer', path: '/developer', label: { he: 'Developer API', en: 'Developer API' }, defaultOn: false, hideSm: true },
 ];
 
 export const FEATURE_IDS = FEATURES.map((f) => f.id);
