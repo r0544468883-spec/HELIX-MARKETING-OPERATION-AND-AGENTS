@@ -392,6 +392,30 @@ export async function saveChannelConnection(
   return { ok: true };
 }
 
+// Link a WhatsApp number to the current workspace so the operator bot answers
+// with THIS workspace's data (same bot_links mechanism the Telegram bot resolves).
+// Phone is normalised to bare international digits (matches the wa_id Meta sends).
+export async function linkWhatsApp(phone: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'unauthorized' };
+
+  const ws = await currentWorkspace(supabase, user.id);
+  if (!ws) return { error: 'no_workspace' };
+
+  const digits = phone.replace(/\D/g, '').replace(/^00/, '');
+  if (digits.length < 8) return { error: 'invalid_phone' };
+
+  const { error } = await supabase.from('bot_links').upsert(
+    { channel: 'whatsapp', identifier: digits, workspace_id: ws },
+    { onConflict: 'channel,identifier' }
+  );
+  if (error) return { error: error.message };
+  return { ok: true, identifier: digits };
+}
+
 // ---------- Video Studio ----------
 
 export async function saveVideoTimeline(requestId: string, timeline: unknown) {

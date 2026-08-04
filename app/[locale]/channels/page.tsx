@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import ChannelConnections from '@/components/ChannelConnections';
+import BotWhatsAppLink from '@/components/BotWhatsAppLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +27,22 @@ export default async function ChannelsPage({
     .maybeSingle();
 
   let initial: Conn[] = [];
+  let waIdentifier = '';
   if (mem?.workspace_id) {
     const { data } = await supabase
       .from('channel_connections')
       .select('channel, config, active')
       .eq('workspace_id', mem.workspace_id);
     initial = (data ?? []) as Conn[];
+
+    const { data: link } = await supabase
+      .from('bot_links')
+      .select('identifier')
+      .eq('workspace_id', mem.workspace_id)
+      .eq('channel', 'whatsapp')
+      .limit(1)
+      .maybeSingle();
+    waIdentifier = (link?.identifier as string) ?? '';
   }
 
   return (
@@ -43,6 +54,11 @@ export default async function ChannelsPage({
         חברו את הערוצים כדי לאפשר הפצה. טלגרם ומייל עובדים מיד; וואטסאפ דורש WhatsApp Cloud API.
       </p>
       <ChannelConnections initial={initial} />
+
+      <h2 className="font-display text-[clamp(18px,3vw,22px)] font-extrabold tracking-tight mt-10 mb-4">
+        בוט וואטסאפ
+      </h2>
+      <BotWhatsAppLink initial={waIdentifier} />
     </div>
   );
 }
