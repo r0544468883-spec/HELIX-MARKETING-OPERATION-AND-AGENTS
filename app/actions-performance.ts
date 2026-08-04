@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 import { runWorkspace, launchCreativeOnPlatform, type PerfSettings } from '@/lib/performance/engine';
 import { getConnector, type ChannelConfig, type AdRef } from '@/lib/performance/connectors';
 import type { Metric } from '@/lib/performance/scoring';
+import { learnStyleProfile } from '@/lib/performance/style-profile';
+import { buildAndLaunch, type CampaignBrief } from '@/lib/performance/campaign-builder';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -94,6 +96,57 @@ export async function saveSettings(patch: Partial<PerfSettings>) {
 
 export async function setMetric(metric: Metric) {
   return saveSettings({ metric });
+}
+
+// ── Style learning: infer naming/budget/preferences from the workspace's own history ──
+export async function learnStyle() {
+  const a = await auth();
+  if ('error' in a) return a;
+  const profile = await learnStyleProfile(a.supabase, a.ws);
+  revalidate();
+  return { ok: true, profile };
+}
+
+// ── AI campaign builder: brief → styled spec → seed pool → (connector) build on platform ──
+export async function buildCampaign(brief: CampaignBrief) {
+  const a = await auth();
+  if ('error' in a) return a;
+  if (!brief?.platform?.trim() || !brief?.product?.trim()) return { error: 'bad_request' as const };
+  const r = await buildAndLaunch(a.supabase, a.ws, brief);
+  revalidate();
+  return r;
+}
+
+// ── White-label report: branding + a shareable public token ──
+export type BrandingForm = { brand_name?: string; logo_url?: string; primary_color?: string; footer?: string };
+
+export async function setBranding(branding: BrandingForm) {
+  const a = await auth();
+  if ('error' in a) return a;
+  const clean: BrandingForm = {
+    brand_name: branding.brand_name?.trim() || undefined,
+    logo_url: branding.logo_url?.trim() || undefined,
+    primary_color: branding.primary_color?.trim() || undefined,
+    footer: branding.footer?.trim() || undefined,
+  };
+  const { error } = await a.supabase.from('workspaces').update({ branding: clean }).eq('id', a.ws);
+  if (error) return { error: error.message };
+  revalidate();
+  return { ok: true };
+}
+
+/** Create (once) the public report token for this workspace and return the share URL. */
+export async function ensureReportToken() {
+  const a = await auth();
+  if ('error' in a) return a;
+  const { data: ws } = await a.supabase.from('workspaces').select('report_token').eq('id', a.ws).maybeSingle();
+  let token = ws?.report_token as string | null;
+  if (!token) {
+    token = crypto.randomUUID().replace(/-/g, '');
+    const { error } = await a.supabase.from('workspaces').update({ report_token: token }).eq('id', a.ws);
+    if (error) return { error: error.message };
+  }
+  return { ok: true, token, path: `/report/${token}` };
 }
 
 // ── Run the loop now (score → record decisions) ──

@@ -4,7 +4,19 @@ import { tiktokConnector } from './tiktok';
 import { googleConnector } from './google';
 import { outbrainConnector } from './outbrain';
 
-export type { AdConnector, AdRef, CreativeUpload, UploadResult, InsightRow, ChannelConfig } from './types';
+export type {
+  AdConnector,
+  AdRef,
+  CreativeUpload,
+  UploadResult,
+  InsightRow,
+  ChannelConfig,
+  CampaignSpec,
+  CampaignObjective,
+  CampaignResult,
+  CampaignAudience,
+  CampaignCreative,
+} from './types';
 
 // Map a creative's `platform` label (however it's spelled, EN or HE) to its connector.
 // The channel_connections.config row is looked up by the SAME label in the engine.

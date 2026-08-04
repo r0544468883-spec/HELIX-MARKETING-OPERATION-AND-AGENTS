@@ -32,6 +32,42 @@ export type CreativeUpload = {
 
 export type UploadResult = { ok: boolean; externalId?: string; ref?: AdRef; error?: string };
 
+// ── New-campaign creation (build a whole campaign from scratch, "in under a minute") ──
+// A platform-neutral spec every connector maps to its own campaign→adset/adgroup→ad
+// hierarchy. Objective is normalized (see OBJECTIVE_MAP in each connector). Everything
+// is created PAUSED — HELIX never spends on its own; the operator activates after review.
+export type CampaignAudience = {
+  name: string;
+  countries?: string[]; // ISO-2, default ['IL']
+  ageMin?: number;
+  ageMax?: number;
+  interests?: string[];
+};
+export type CampaignCreative = {
+  name?: string;
+  headline?: string;
+  body?: string;
+  mediaUrl?: string;
+};
+export type CampaignObjective = 'traffic' | 'leads' | 'awareness' | 'conversions' | 'sales' | 'engagement';
+export type CampaignSpec = {
+  name: string;
+  objective?: CampaignObjective;
+  dailyBudget: number; // major units (₪)
+  link?: string;
+  audiences: CampaignAudience[];
+  creatives: CampaignCreative[];
+};
+export type CampaignResult = {
+  ok: boolean;
+  campaignId?: string;
+  adsetIds?: string[];
+  adIds?: string[];
+  error?: string;
+  /** Human note when a platform only partially built (e.g. campaign+adgroup, ads pending). */
+  note?: string;
+};
+
 /** Normalized stats. Not every platform returns every field; missing → undefined. */
 export type InsightRow = {
   impressions: number;
@@ -51,6 +87,8 @@ export interface AdConnector {
   uploadCreative(config: ChannelConfig, c: CreativeUpload): Promise<UploadResult>;
   /** Read live stats for a creative. null = not available / not configured. */
   fetchInsights(config: ChannelConfig, ref: AdRef): Promise<InsightRow | null>;
+  /** Build a whole campaign (campaign→adset/adgroup→ads), PAUSED. */
+  createCampaign(config: ChannelConfig, spec: CampaignSpec): Promise<CampaignResult>;
 }
 
 // ── shared helpers for the connectors ──

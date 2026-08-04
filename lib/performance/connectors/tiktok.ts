@@ -1,5 +1,15 @@
-import type { AdConnector, ChannelConfig, InsightRow } from './types';
+import type { AdConnector, CampaignObjective, ChannelConfig, InsightRow } from './types';
 import { cfg, jsonFetch } from './types';
+
+// Normalized objective → TikTok objective_type.
+const TIKTOK_OBJECTIVE: Record<CampaignObjective, string> = {
+  traffic: 'TRAFFIC',
+  leads: 'LEAD_GENERATION',
+  awareness: 'REACH',
+  conversions: 'WEB_CONVERSIONS',
+  sales: 'PRODUCT_SALES',
+  engagement: 'ENGAGEMENT',
+};
 
 // TikTok Ads — Business/Marketing API v1.3. Auth is a header token + advertiser_id.
 // config: { access_token, advertiser_id }. All responses wrap { code, message, data };
@@ -79,5 +89,29 @@ export const tiktokConnector: AdConnector = {
       revenue: (num('complete_payment_roas') || 0) * spend, // ROAS×spend ≈ revenue
     };
     return row;
+  },
+
+  async createCampaign(config, spec) {
+    const c = ctx(config);
+    if (!c) return { ok: false, error: 'tiktok_not_configured' };
+    // Campaign-level (objective + total daily budget). Ad groups need the account's
+    // placement/targeting/bid config which the client owns, so we build the campaign
+    // shell and return a note — the operator adds ad groups + video creatives in Ads
+    // Manager (or the client seeds ready creatives into the pool for the score loop).
+    const { json } = await jsonFetch(`${BASE}/campaign/create/`, {
+      method: 'POST',
+      headers: c.headers,
+      body: JSON.stringify({
+        advertiser_id: c.advertiserId,
+        campaign_name: spec.name,
+        objective_type: TIKTOK_OBJECTIVE[spec.objective ?? 'traffic'],
+        budget_mode: 'BUDGET_MODE_DAY',
+        budget: Math.max(20, Math.round(spec.dailyBudget)),
+        operation_status: 'DISABLE', // created paused
+      }),
+    });
+    if (!ok(json)) return { ok: false, error: (json.message as string) || 'tiktok_campaign_failed' };
+    const campaignId = (json.data as { campaign_id?: string } | undefined)?.campaign_id;
+    return { ok: true, campaignId, note: 'tiktok: campaign created (paused). Ad groups + video creatives pending.' };
   },
 };

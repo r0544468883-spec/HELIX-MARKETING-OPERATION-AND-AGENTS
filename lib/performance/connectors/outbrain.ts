@@ -87,4 +87,29 @@ export const outbrainConnector: AdConnector = {
     };
     return row;
   },
+
+  async createCampaign(config, spec) {
+    const t = await token(config);
+    const marketerId = cfg(config, 'marketer_id', 'OUTBRAIN_MARKETER_ID');
+    if (!t || !marketerId) return { ok: false, error: 'outbrain_not_configured' };
+    // Native campaigns carry their own budget + CPC. We create it disabled with a
+    // monthly budget (daily×30 proxy) and default IL geo; promoted links (creatives)
+    // are added via uploadCreative once the pool goes live.
+    const geo = spec.audiences[0]?.countries ?? ['IL'];
+    const { ok, json } = await jsonFetch(`${BASE}/marketers/${marketerId}/campaigns`, {
+      method: 'POST',
+      headers: { 'OB-TOKEN-V1': t, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: spec.name,
+        enabled: false,
+        cpc: 0.5,
+        budget: { amount: Math.round(spec.dailyBudget * 30), type: 'MONTHLY', pacing: 'SPREAD' },
+        targeting: { platform: ['DESKTOP', 'MOBILE', 'TABLET'], geo: geo.map((code) => ({ code, type: 'Country' })) },
+      }),
+    });
+    if (!ok) return { ok: false, error: (json.message as string) || 'outbrain_campaign_failed' };
+    const campaignId = (json.id as string) || undefined;
+    const budgetId = ((json.budget as { id?: string } | undefined)?.id) || undefined;
+    return { ok: true, campaignId, note: `outbrain: campaign created (disabled${budgetId ? `, budgetId ${budgetId}` : ''}). Promoted links pending.` };
+  },
 };

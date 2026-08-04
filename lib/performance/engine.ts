@@ -11,6 +11,7 @@ import {
 } from './scoring';
 import { coldStartScore } from './cold-start';
 import { getConnector, type AdRef, type ChannelConfig } from './connectors';
+import { notifyActivity } from './notify';
 
 // The performance loop. Loads the creative pool + latest live metrics, scores every
 // creative with the Bayesian blend (cold-start prior + client-baseline-normalized
@@ -26,6 +27,7 @@ export type PerfSettings = {
   autonomy: 'approve' | 'autopilot';
   pause_below: number;
   promote_above: number;
+  notify_whatsapp: boolean;
 };
 
 const DEFAULT_SETTINGS: PerfSettings = {
@@ -34,6 +36,7 @@ const DEFAULT_SETTINGS: PerfSettings = {
   autonomy: 'approve',
   pause_below: 35,
   promote_above: 70,
+  notify_whatsapp: false,
 };
 
 export type CreativeRow = {
@@ -64,7 +67,7 @@ export type DecisionAction = 'pause' | 'scale_up' | 'scale_down' | 'promote' | '
 export async function getSettings(db: DB, workspaceId: string): Promise<PerfSettings> {
   const { data } = await db
     .from('performance_settings')
-    .select('metric, execution_mode, autonomy, pause_below, promote_above')
+    .select('metric, execution_mode, autonomy, pause_below, promote_above, notify_whatsapp')
     .eq('workspace_id', workspaceId)
     .maybeSingle();
   return { ...DEFAULT_SETTINGS, ...(data as Partial<PerfSettings> | null) };
@@ -310,6 +313,9 @@ export async function runWorkspace(db: DB, workspaceId: string): Promise<{ score
     });
     recorded++;
   }
+
+  // WhatsApp activity update (opt-in, best-effort — never fails the run).
+  if (recorded > 0) await notifyActivity(db, workspaceId, scored, recorded, applied);
 
   return { scored, recorded, applied };
 }

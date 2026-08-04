@@ -2,14 +2,17 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireFeature } from '@/lib/features/guard';
 import { scoreWorkspace } from '@/lib/performance/engine';
+import { availableOAuthPlatforms } from '@/lib/performance/oauth';
 import PerformanceDashboard from '@/components/PerformanceDashboard';
+import PerformanceTools from '@/components/PerformanceTools';
 
 export const dynamic = 'force-dynamic';
 
 // Performance module — creative scoring (Bayesian: AI prior + client-baseline data),
 // swapping & budget prioritization. Guarded by the `performance` feature toggle.
-export default async function PerformancePage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function PerformancePage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ status?: string }> }) {
   const { locale } = await params;
+  const { status: connectStatus } = await searchParams;
   await requireFeature('performance');
 
   const supabase = await createClient();
@@ -24,6 +27,13 @@ export default async function PerformancePage({ params }: { params: Promise<{ lo
   }
 
   const { settings, scored } = await scoreWorkspace(supabase, mem.workspace_id);
+
+  // Tools-panel data: branding + report token, connected channels, available OAuth apps.
+  const [{ data: ws }, { data: channels }] = await Promise.all([
+    supabase.from('workspaces').select('branding, report_token').eq('id', mem.workspace_id).maybeSingle(),
+    supabase.from('channel_connections').select('channel').eq('workspace_id', mem.workspace_id),
+  ]);
+  const connected = ((channels ?? []) as { channel: string }[]).map((c) => c.channel);
   const { data: decisions } = await supabase
     .from('performance_decisions')
     .select('id, creative_id, action, reason, score, confidence, status, created_at')
@@ -33,6 +43,16 @@ export default async function PerformancePage({ params }: { params: Promise<{ lo
     .limit(50);
 
   return (
+    <>
+    <PerformanceTools
+      locale={locale}
+      oauthPlatforms={availableOAuthPlatforms()}
+      connected={connected}
+      branding={(ws?.branding as Record<string, string>) ?? {}}
+      reportToken={(ws?.report_token as string | null) ?? null}
+      notifyWhatsapp={Boolean((settings as { notify_whatsapp?: boolean }).notify_whatsapp)}
+      connectStatus={connectStatus}
+    />
     <PerformanceDashboard
       locale={locale}
       settings={settings}
@@ -52,5 +72,6 @@ export default async function PerformancePage({ params }: { params: Promise<{ lo
       }))}
       decisions={(decisions ?? []) as never[]}
     />
+    </>
   );
 }
