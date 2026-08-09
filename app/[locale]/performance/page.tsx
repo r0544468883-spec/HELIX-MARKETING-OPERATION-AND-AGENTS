@@ -13,6 +13,27 @@ export const dynamic = 'force-dynamic';
 export default async function PerformancePage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ status?: string }> }) {
   const { locale } = await params;
   const { status: connectStatus } = await searchParams;
+
+  // Local preview: when Supabase isn't configured (localhost, no .env), render the real
+  // page's tools grid + empty dashboard without auth/feature-guard, so the integration is
+  // viewable at its real URL. In production NEXT_PUBLIC_SUPABASE_URL is set → normal path.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return (
+      <>
+        <PerformanceTools
+          locale={locale}
+          oauthPlatforms={availableOAuthPlatforms()}
+          connected={[]}
+          branding={{}}
+          reportToken={null}
+          notifyWhatsapp={false}
+          connectStatus={connectStatus}
+        />
+        <PerformanceDashboard locale={locale} settings={null} scored={[]} decisions={[]} />
+      </>
+    );
+  }
+
   await requireFeature('performance');
 
   const supabase = await createClient();

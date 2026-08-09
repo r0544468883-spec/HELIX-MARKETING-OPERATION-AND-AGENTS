@@ -3,6 +3,9 @@
 import { useState, useTransition } from 'react';
 import { Sparkles, Wand2, Link2, FileText, MessageCircle, Loader2, Check, Copy } from 'lucide-react';
 import { buildCampaign, learnStyle, setBranding, ensureReportToken, saveSettings } from '@/app/actions-performance';
+import ContentDnaCard from '@/components/ContentDnaCard';
+import PostBuilderCard from '@/components/PostBuilderCard';
+import EmailWriterCard from '@/components/EmailWriterCard';
 
 type Branding = { brand_name?: string; logo_url?: string; primary_color?: string; footer?: string };
 
@@ -45,6 +48,13 @@ export default function PerformanceTools({
       <div className="grid gap-4 md:grid-cols-2 mt-4">
         <ReportPanel he={he} branding={branding} reportToken={reportToken} pending={pending} run={run} />
         <WhatsAppPanel he={he} initial={notifyWhatsapp} connected={connected} pending={pending} run={run} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        <ContentDnaCard he={he} />
+        <PostBuilderCard he={he} />
+      </div>
+      <div className="mt-4">
+        <EmailWriterCard he={he} />
       </div>
     </div>
   );

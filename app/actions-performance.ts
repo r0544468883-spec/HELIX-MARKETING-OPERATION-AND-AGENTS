@@ -6,6 +6,8 @@ import { runWorkspace, launchCreativeOnPlatform, type PerfSettings } from '@/lib
 import { getConnector, type ChannelConfig, type AdRef } from '@/lib/performance/connectors';
 import type { Metric } from '@/lib/performance/scoring';
 import { learnStyleProfile } from '@/lib/performance/style-profile';
+import { analyzeDNA } from '@/lib/performance/content-dna';
+import { buildPost, handleEmail, type BuildInput, type EmailInput } from '@/lib/performance/content-tool';
 import { buildAndLaunch, type CampaignBrief } from '@/lib/performance/campaign-builder';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
@@ -105,6 +107,37 @@ export async function learnStyle() {
   const profile = await learnStyleProfile(a.supabase, a.ws);
   revalidate();
   return { ok: true, profile };
+}
+
+// ── Content DNA: decompose winning posts → shared formula + fill-in template ──
+export async function analyzeContentDna(posts: string[]) {
+  const a = await auth();
+  if ('error' in a) return a;
+  const clean = (posts ?? []).map((p) => (p ?? '').trim()).filter(Boolean);
+  if (clean.length < 2) return { error: 'bad_request' as const };
+  const dna = await analyzeDNA(clean);
+  if (!dna) return { error: 'missing_api_key' as const };
+  return { ok: true, dna };
+}
+
+// ── Post builder: topic (+ optional learned formula) → ready-to-post copy ──
+export async function buildPostAction(input: BuildInput) {
+  const a = await auth();
+  if ('error' in a) return a;
+  if (!input?.topic?.trim()) return { error: 'bad_request' as const };
+  const result = await buildPost(input);
+  if (!result) return { error: 'missing_api_key' as const };
+  return { ok: true, result };
+}
+
+// ── Email writer/rewriter (HE/EN) ──
+export async function emailAction(input: EmailInput) {
+  const a = await auth();
+  if ('error' in a) return a;
+  if (!input?.text?.trim()) return { error: 'bad_request' as const };
+  const result = await handleEmail(input);
+  if (!result) return { error: 'missing_api_key' as const };
+  return { ok: true, result };
 }
 
 // ── AI campaign builder: brief → styled spec → seed pool → (connector) build on platform ──
