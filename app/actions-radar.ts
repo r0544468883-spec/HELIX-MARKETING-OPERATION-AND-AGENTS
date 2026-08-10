@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { generateComment } from '@/lib/engagement/engage-agent';
+import { resolveMode } from '@/lib/autonomy/resolve';
+import { serverStore } from '@/lib/autonomy/store';
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -102,17 +104,24 @@ export async function convertLeadToEngagement(leadId: string) {
     .select('id')
     .single();
 
+  // Autonomy switch (ops.radar_outreach, outbound): baseline stays 'suggested'
+  // (HITL — no regression). 'autopilot' inserts 'approved' so the engagement cron
+  // posts it without a manual ✓ — reached only with an explicit risk_ack opt-in
+  // (the guard downgrades otherwise, since auto-posting is ToS-sensitive).
+  const mode = await resolveMode(serverStore(supabase), ws, 'ops.radar_outreach');
+  const status = mode === 'autopilot' ? 'approved' : 'suggested';
+
   const { error } = await supabase.from('engagement_actions').insert({
     workspace_id: ws,
     channel: 'פייסבוק',
     target_id: target?.id ?? null,
     type: 'comment',
     content: draft,
-    status: 'suggested',
+    status,
   });
   if (error) return { error: error.message };
 
   await supabase.from('radar_leads').update({ status: 'contacted' }).eq('id', leadId);
   revalidatePath('/');
-  return { ok: true };
+  return { ok: true, mode, status };
 }
