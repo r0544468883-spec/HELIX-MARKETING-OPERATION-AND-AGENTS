@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { matchFunnel, renderTemplate } from '@/lib/funnels/matcher';
 import { replyToComment, sendPrivateReply, sendPageMessage } from '@/lib/distribution/reply';
 import { generateDmReply, classifyIntent } from '@/lib/engagement/engage-agent';
+import { reviewDmReply } from '@/lib/agents/ops/department-chief';
 import { handleBotMessage } from '@/lib/bot/router';
 import { sendWhatsApp } from '@/lib/distribution/whatsapp';
 import type { CommentFunnel } from '@/lib/engagement/types';
@@ -185,6 +186,11 @@ async function handleMessage(
 
   const reply = await generateDmReply(text, 'ענה בקצרה ובאדיבות בשם העסק.').catch(() => '');
   if (!reply) return;
+  // Critic gate (§4b): vet the auto-reply before sending it in the brand's name.
+  // Not safe (spam/over-promise/tone-deaf on a complaint) → don't auto-send; leave
+  // the thread for a human. Absent critic → held (safe default).
+  const review = await reviewDmReply(reply, text);
+  if (!review.safeToAutoPost) return;
   await sendPageMessage(conn.config, senderId, reply);
 }
 

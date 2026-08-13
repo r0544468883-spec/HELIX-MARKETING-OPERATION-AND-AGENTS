@@ -8,7 +8,19 @@
 export type CommentVerdict = 'post' | 'revise' | 'block';
 export type CommentReview = {
   verdict: CommentVerdict;
-  safeToAutoPost: boolean;   // may the autopilot cron post this with no human ✓?
+  safeToAutoPost: boolean;   // may the autopilot cron post/send this with no human ✓?
   risks: string[];           // brand / spam / ToS / tone-of-context concerns
   note: string;              // one blunt sentence, no sugarcoating
+};
+
+// Budget Critic — vets a MONEY move (pause an ad / scale a budget +25%) before the
+// performance engine applies it on autopilot. The scoring is already confidence-
+// gated deterministically; this adds an adversarial sanity check (sample size,
+// confounders, downside of the spend) before real money shifts.
+export type BudgetVerdict = 'apply' | 'hold';
+export type BudgetReview = {
+  verdict: BudgetVerdict;
+  safeToApply: boolean;      // may autopilot execute this pause/scale with no human ✓?
+  concerns: string[];
+  note: string;
 };

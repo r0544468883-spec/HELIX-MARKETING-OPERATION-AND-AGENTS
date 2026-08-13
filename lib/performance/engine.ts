@@ -12,6 +12,7 @@ import {
 import { coldStartScore } from './cold-start';
 import { getConnector, type AdRef, type ChannelConfig } from './connectors';
 import { notifyActivity } from './notify';
+import { reviewBudgetDecision } from '@/lib/agents/ops/department-chief';
 
 // The performance loop. Loads the creative pool + latest live metrics, scores every
 // creative with the Bayesian blend (cold-start prior + client-baseline-normalized
@@ -278,8 +279,23 @@ export async function runWorkspace(db: DB, workspaceId: string): Promise<{ score
   for (const s of scored) {
     if (s.action === 'keep') continue; // nothing to record for steady state
 
-    const willApply = autopilot && (s.action === 'pause' || s.action === 'scale_up');
+    let willApply = autopilot && (s.action === 'pause' || s.action === 'scale_up');
     let status: 'pending' | 'applied' = 'pending';
+
+    // Budget Critic (§4b): a second, adversarial check before real money moves.
+    // The scorer is confidence-gated already; this catches thin samples, confounders,
+    // and risk-asymmetric moves. A 'hold' keeps the decision 'pending' for a human.
+    if (willApply) {
+      const review = await reviewBudgetDecision({
+        action: s.action,
+        score: Math.round(s.score.blended),
+        confidence: s.score.confidence,
+        spend: s.metrics.spend,
+        reason: s.reason,
+        creativeName: s.creative.name,
+      });
+      if (!review.safeToApply) willApply = false; // held → stays 'pending' for approval
+    }
 
     if (willApply) {
       const cfg = await getConfig(s.creative.platform);

@@ -3,7 +3,9 @@
 // The Maker (lib/engagement/engage-agent::generateComment) drafts; this only
 // decides whether it is safe to auto-post without a human ✓.
 import { critique } from './roles/critic';
-import type { CommentReview } from './contract';
+import { critiqueDm } from './roles/dm-critic';
+import { critiqueBudget } from './roles/budget-critic';
+import type { CommentReview, BudgetReview } from './contract';
 
 // Conservative default when the Critic can't be reached: never auto-post in the
 // brand's name un-reviewed — hold for human approval (mirrors Rank/Growth Doctor:
@@ -25,4 +27,35 @@ export async function reviewComment(
   }
   const review = await critique(draft, postText, brandVoice).catch(() => null);
   return review ?? HELD;
+}
+
+// Review an auto-generated DM reply before it is sent in the brand's name.
+export async function reviewDmReply(reply: string, incoming: string): Promise<CommentReview> {
+  if (!reply.trim()) {
+    return { verdict: 'block', safeToAutoPost: false, risks: ['תשובה ריקה'], note: 'תשובה ריקה — אין מה לשלוח.' };
+  }
+  const review = await critiqueDm(reply, incoming).catch(() => null);
+  return review ?? HELD;
+}
+
+// Conservative default for money moves: an unreachable Critic holds the action for
+// human approval — never auto-shifts ad budget un-reviewed.
+const HELD_BUDGET: BudgetReview = {
+  verdict: 'hold',
+  safeToApply: false,
+  concerns: ['המבקר לא זמין'],
+  note: 'המבקר לא זמין — לא מבצע שינוי תקציב אוטומטית, מעביר לאישור אדם.',
+};
+
+// Review a pause/scale money move before the performance engine applies it.
+export async function reviewBudgetDecision(input: {
+  action: string;
+  score: number;
+  confidence: number;
+  spend: number;
+  reason: string;
+  creativeName: string;
+}): Promise<BudgetReview> {
+  const review = await critiqueBudget(input).catch(() => null);
+  return review ?? HELD_BUDGET;
 }
