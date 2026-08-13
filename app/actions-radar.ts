@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { generateComment } from '@/lib/engagement/engage-agent';
+import { reviewComment } from '@/lib/agents/ops/department-chief';
 import { resolveMode } from '@/lib/autonomy/resolve';
 import { serverStore } from '@/lib/autonomy/store';
 
@@ -109,7 +110,20 @@ export async function convertLeadToEngagement(leadId: string) {
   // posts it without a manual ✓ — reached only with an explicit risk_ack opt-in
   // (the guard downgrades otherwise, since auto-posting is ToS-sensitive).
   const mode = await resolveMode(serverStore(supabase), ws, 'ops.radar_outreach');
-  const status = mode === 'autopilot' ? 'approved' : 'suggested';
+  let status = mode === 'autopilot' ? 'approved' : 'suggested';
+
+  // Critic gate (§4b): even on autopilot, an adversarial brand-safety reviewer
+  // vets the draft before it auto-posts in the brand's name. A non-safe verdict
+  // downgrades 'approved' → 'suggested' so a human confirms — nothing spammy /
+  // tone-deaf / off-brand goes out unattended. Absent critic → held (safe default).
+  let held: { note: string } | null = null;
+  if (mode === 'autopilot') {
+    const review = await reviewComment(draft, (lead.content as string) ?? '', 'פנייה אישית ומועילה, בלי קידום בוטה.');
+    if (!review.safeToAutoPost) {
+      status = 'suggested';
+      held = { note: review.note };
+    }
+  }
 
   const { error } = await supabase.from('engagement_actions').insert({
     workspace_id: ws,
@@ -123,5 +137,5 @@ export async function convertLeadToEngagement(leadId: string) {
 
   await supabase.from('radar_leads').update({ status: 'contacted' }).eq('id', leadId);
   revalidatePath('/');
-  return { ok: true, mode, status };
+  return { ok: true, mode, status, heldByCritic: !!held, note: held?.note };
 }
