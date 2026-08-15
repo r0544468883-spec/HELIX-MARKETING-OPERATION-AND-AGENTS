@@ -5,6 +5,9 @@
 import { critique } from './roles/critic';
 import { critiqueDm } from './roles/dm-critic';
 import { critiqueBudget } from './roles/budget-critic';
+import { analyzePost } from './roles/researcher';
+import { reviseComment } from './roles/editor';
+import { generateComment } from '@/lib/engagement/engage-agent';
 import type { CommentReview, BudgetReview } from './contract';
 
 // Conservative default when the Critic can't be reached: never auto-post in the
@@ -27,6 +30,31 @@ export async function reviewComment(
   }
   const review = await critique(draft, postText, brandVoice).catch(() => null);
   return review ?? HELD;
+}
+
+// The engagement department (§4b): Researcher (read the post/context) → Maker
+// (generateComment, guided by the brief) → Critic (brand-safety) → Editor (revise
+// once if flagged). Returns the improved comment + the final auto-post verdict.
+export async function composeEngagement(
+  postText: string,
+  brandVoice: string,
+): Promise<{ comment: string; review: CommentReview }> {
+  const brief = await analyzePost(postText).catch(() => null);
+  const voice = brief
+    ? `${brandVoice} זווית: ${brief.angle}. טון: ${brief.tone}.${brief.sensitive ? ' הפוסט רגיש — הגב בזהירות רבה, ואם אין ערך אמיתי עדיף לא להגיב.' : ''}`
+    : brandVoice;
+
+  let comment = (await generateComment(postText, voice).catch(() => '')) ?? '';
+  let review = await reviewComment(comment, postText, brandVoice);
+
+  if (comment.trim() && !review.safeToAutoPost) {
+    const revised = await reviseComment(comment, review.risks, postText, brandVoice).catch(() => null);
+    if (revised) {
+      comment = revised;
+      review = await reviewComment(comment, postText, brandVoice);
+    }
+  }
+  return { comment, review };
 }
 
 // Review an auto-generated DM reply before it is sent in the brand's name.

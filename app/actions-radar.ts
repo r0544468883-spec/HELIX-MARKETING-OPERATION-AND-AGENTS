@@ -2,8 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { generateComment } from '@/lib/engagement/engage-agent';
-import { reviewComment } from '@/lib/agents/ops/department-chief';
+import { composeEngagement } from '@/lib/agents/ops/department-chief';
 import { resolveMode } from '@/lib/autonomy/resolve';
 import { serverStore } from '@/lib/autonomy/store';
 
@@ -87,10 +86,11 @@ export async function convertLeadToEngagement(leadId: string) {
     .maybeSingle();
   if (!lead) return { error: 'lead_not_found' };
 
-  const draft = await generateComment(
-    (lead.content as string) ?? '',
-    'פנייה אישית ומועילה, בלי קידום בוטה.'
-  ).catch(() => '');
+  // Engagement department (§4b): Researcher (read the post) → Maker (comment) →
+  // Critic (brand-safety) → Editor (revise if flagged). Returns the improved
+  // comment + the final auto-post verdict.
+  const brandVoice = 'פנייה אישית ומועילה, בלי קידום בוטה.';
+  const { comment: draft, review } = await composeEngagement((lead.content as string) ?? '', brandVoice);
 
   const { data: target } = await supabase
     .from('engagement_targets')
@@ -112,17 +112,12 @@ export async function convertLeadToEngagement(leadId: string) {
   const mode = await resolveMode(serverStore(supabase), ws, 'ops.radar_outreach');
   let status = mode === 'autopilot' ? 'approved' : 'suggested';
 
-  // Critic gate (§4b): even on autopilot, an adversarial brand-safety reviewer
-  // vets the draft before it auto-posts in the brand's name. A non-safe verdict
-  // downgrades 'approved' → 'suggested' so a human confirms — nothing spammy /
-  // tone-deaf / off-brand goes out unattended. Absent critic → held (safe default).
+  // The team already vetted the comment; on autopilot a non-safe verdict downgrades
+  // 'approved' → 'suggested' so a human confirms. Absent critic → held (safe default).
   let held: { note: string } | null = null;
-  if (mode === 'autopilot') {
-    const review = await reviewComment(draft, (lead.content as string) ?? '', 'פנייה אישית ומועילה, בלי קידום בוטה.');
-    if (!review.safeToAutoPost) {
-      status = 'suggested';
-      held = { note: review.note };
-    }
+  if (mode === 'autopilot' && !review.safeToAutoPost) {
+    status = 'suggested';
+    held = { note: review.note };
   }
 
   const { error } = await supabase.from('engagement_actions').insert({
