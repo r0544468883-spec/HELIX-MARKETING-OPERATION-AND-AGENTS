@@ -4,6 +4,8 @@
 //   3) AI-detection score (0-100 human-ness) — the gate signal
 // Server-only (reads ANTHROPIC_API_KEY). No SDK dependency — plain fetch.
 
+import { checkContentQuality, type ContentQualityResult } from './content-quality';
+
 const MODEL = process.env.CONTENT_MODEL || 'claude-sonnet-5';
 
 type Lang = 'he' | 'en';
@@ -58,7 +60,9 @@ async function claude(system: string, user: string, maxTokens = 800): Promise<st
   return (json.content?.[0]?.text ?? '').trim();
 }
 
-export type ChannelDraft = { body: string; language: Lang; aiScore: number };
+// aiScore is the LLM human-ness gate; contentQuality is a deterministic lint
+// (AI-style emojis in prose + orphan words) that needs no model call.
+export type ChannelDraft = { body: string; language: Lang; aiScore: number; contentQuality?: ContentQualityResult };
 
 export async function generateChannelDraft(
   brief: string,
@@ -92,7 +96,7 @@ export async function generateChannelDraft(
   );
   const aiScore = Math.max(0, Math.min(100, parseInt(scoreRaw.replace(/\D/g, ''), 10) || 0));
 
-  return { body, language: cfg.lang, aiScore };
+  return { body, language: cfg.lang, aiScore, contentQuality: checkContentQuality(body) };
 }
 
 // A/B variants for one channel, organized as ANGLES × variations. Each of the 6
@@ -165,5 +169,5 @@ export async function generateChannelVariants(
     })
   );
 
-  return perAngle.flat().map((v, index) => ({ ...v, index }));
+  return perAngle.flat().map((v, index) => ({ ...v, index, contentQuality: checkContentQuality(v.body) }));
 }
