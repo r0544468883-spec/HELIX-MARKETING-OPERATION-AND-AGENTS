@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { composeEngagement } from '@/lib/agents/ops/department-chief';
+import { bestPostWindow } from '@/lib/agents/ops/roles/scheduler';
 import { resolveMode } from '@/lib/autonomy/resolve';
 import { serverStore } from '@/lib/autonomy/store';
 
@@ -132,5 +133,7 @@ export async function convertLeadToEngagement(leadId: string) {
 
   await supabase.from('radar_leads').update({ status: 'contacted' }).eq('id', leadId);
   revalidatePath('/');
-  return { ok: true, mode, status, heldByCritic: !!held, note: held?.note };
+  // Scheduler: recommend WHEN to post this comment (best window for the channel).
+  const when = bestPostWindow('פייסבוק');
+  return { ok: true, mode, status, heldByCritic: !!held, note: held?.note, bestTime: `${when.label} — ${when.reason}` };
 }

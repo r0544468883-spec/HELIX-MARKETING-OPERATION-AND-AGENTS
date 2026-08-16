@@ -2,20 +2,27 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from '@/app/actions-ops';
 import { getEnabledFeatures } from '@/lib/features/server';
+import { getActiveBranding, type Branding } from '@/lib/branding';
 import type { Locale } from '@/lib/features';
 import NavLinks from './NavLinks';
 
 export default async function Nav({ locale }: { locale: string }) {
   let signedIn = false;
+  let branding: Branding = {};
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     signedIn = !!user;
+    if (user) branding = await getActiveBranding();
   } catch {
     // עדיין אין חיבור ל-Supabase — הניווט עובד גם בלי
   }
+
+  const accent = branding.primary_color && /^#[0-9a-fA-F]{3,8}$/.test(branding.primary_color) ? branding.primary_color : null;
+  const brandName = branding.brand_name?.trim();
+  const headerStyle = accent ? ({ ['--brand' as string]: accent, ['--brand-hover' as string]: accent }) : undefined;
 
   const L = (p: string) => `/${locale}${p}`;
   const loc = (locale === 'en' ? 'en' : 'he') as Locale;
@@ -33,13 +40,18 @@ export default async function Nav({ locale }: { locale: string }) {
   const hasRequests = features.some((f) => f.id === 'requests');
 
   return (
-    <header className="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-50 bg-bg/85 backdrop-blur-md border-b border-border" style={headerStyle}>
       <div className="max-w-[1280px] mx-auto px-5 md:px-10 h-16 flex items-center justify-between gap-4">
         <Link
           href={homeHref}
-          className="nav-logo font-display font-black text-lg tracking-tight shrink-0"
+          className="nav-logo font-display font-black text-lg tracking-tight shrink-0 flex items-center gap-2"
         >
-          HELIX OPS<span className="dot text-brand">.</span>
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={branding.logo_url} alt={brandName || 'logo'} className="h-7 w-auto object-contain" />
+          ) : (
+            <>{brandName || 'HELIX OPS'}<span className="dot text-brand">.</span></>
+          )}
         </Link>
 
         <NavLinks items={navItems} />
