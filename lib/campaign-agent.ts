@@ -20,6 +20,14 @@ export type SeoPlan = {
   keywords: { term: string; intent: string }[];
   title: string;
   outline: string[];
+  // Hub-and-spoke cluster (HELIX SEO/AEO/GEO methodology §9b — OPS is the "Briefer":
+  // it plans the cluster + templated briefs and hands publishing to helix-rank).
+  cluster?: {
+    pillarKeyword: string;
+    coinedTerm: string | null; // invented category term to own (methodology §3.2)
+    diagram: string;           // signature-diagram concept reused across the cluster
+    spokes: { keyword: string; angle: string }[]; // 4-8 long-tail, each links back to the pillar
+  };
 };
 
 export type ClientProfile = {
@@ -86,12 +94,20 @@ async function buildGoogleAds(brief: string, title: string): Promise<GoogleRSA> 
 }
 
 async function buildSeo(brief: string, title: string): Promise<SeoPlan> {
+  // Methodology §9b: OPS plans a hub-and-spoke CLUSTER (pillar + spokes + a
+  // coined category term + one signature-diagram concept), not a lone keyword.
+  // It stays a BRIEF — OPS exports it; helix-rank produces/publishes the pages.
   const raw = await claude(
-    'אתה אסטרטג SEO. החזר JSON בלבד: {"primaryKeyword": string, "keywords": [{"term": string, "intent": "informational|commercial|transactional"}], "title": string, "outline": string[]}. בעברית, 8-10 מילות מפתח, outline של 5-8 סעיפים. בלי טקסט נוסף.',
+    'אתה אסטרטג SEO/GEO ברמת-קמפיין. במקום מילת-מפתח בודדת, תכנן אשכול hub-and-spoke. החזר JSON בלבד: {"primaryKeyword": string, "keywords": [{"term": string, "intent": "informational|commercial|transactional"}], "title": string, "outline": string[], "cluster": {"pillarKeyword": string, "coinedTerm": string|null, "diagram": string, "spokes": [{"keyword": string, "angle": string}]}}. בעברית. 8-10 מילות מפתח, outline של 5-8 סעיפים, ו-4-8 spokes ממוקדי long-tail. coinedTerm = מונח-קטגוריה שאפשר לתפוס בלי תחרות (או null אם לא רלוונטי). אל תמציא סטטיסטיקות. בלי טקסט נוסף.',
     `נושא/כותרת: ${title}\nבריף: ${brief}`,
-    1200
+    1600
   );
-  return parseJson<SeoPlan>(raw, { primaryKeyword: title, keywords: [], title, outline: [] });
+  const plan = parseJson<SeoPlan>(raw, { primaryKeyword: title, keywords: [], title, outline: [] });
+  if (plan.cluster) {
+    plan.cluster.spokes = (plan.cluster.spokes ?? []).filter((s) => s && s.keyword).slice(0, 8);
+    plan.cluster.coinedTerm = plan.cluster.coinedTerm && plan.cluster.coinedTerm.trim() ? plan.cluster.coinedTerm.trim() : null;
+  }
+  return plan;
 }
 
 // Build the content for ONE channel (the unit of incremental work — the campaign
