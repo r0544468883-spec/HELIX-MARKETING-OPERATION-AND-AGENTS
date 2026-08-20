@@ -4,11 +4,12 @@
 // Topic → ready-to-post copy (+ alternative hooks), any platform, HE/EN. Falls back to the
 // dev-only /api/content-tool route when there's no logged-in workspace (localhost).
 
-import { useState, useTransition } from 'react';
-import { PenLine, Copy, Check, Loader2 } from 'lucide-react';
-import { buildPostAction } from '@/app/actions-performance';
+import { useState, useEffect, useTransition } from 'react';
+import { PenLine, Copy, Check, Loader2, Mic } from 'lucide-react';
+import { buildPostAction, getVoice } from '@/app/actions-performance';
 
 type BuildResult = { post: string; hooks: string[] };
+type Voice = { summary: string; keyTells: string[] };
 
 const CARD = 'border border-border rounded-[14px] p-5 bg-soft/30';
 const INPUT = 'w-full bg-bg border border-border rounded-[8px] px-3 py-2 text-[14px] outline-none focus:border-brand';
@@ -24,12 +25,21 @@ export default function PostBuilderCard({ he = true }: { he?: boolean }) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
+  // Saved voice — when present, posts are written in the operator's own voice by default.
+  const [voice, setVoice] = useState<Voice | null>(null);
+  const [useMyVoice, setUseMyVoice] = useState(true);
+
+  useEffect(() => {
+    getVoice()
+      .then((r) => { if ('voice' in r && r.voice) setVoice({ summary: r.voice.summary, keyTells: r.voice.keyTells }); })
+      .catch(() => {});
+  }, []);
 
   function run() {
     setError('');
     setResult(null);
     start(async () => {
-      const input = { topic, platform, tone, language };
+      const input = { topic, platform, tone, language, useVoice: useMyVoice };
       async function preview() {
         const r = await fetch('/api/content-tool', {
           method: 'POST',
@@ -79,6 +89,17 @@ export default function PostBuilderCard({ he = true }: { he?: boolean }) {
           </select>
         </div>
       </div>
+
+      {/* Voice toggle — write in the operator's own learned voice */}
+      {voice && (
+        <label className="flex items-start gap-2 mt-3 cursor-pointer">
+          <input type="checkbox" checked={useMyVoice} onChange={(e) => setUseMyVoice(e.target.checked)} className="mt-0.5 accent-[var(--brand,#22c55e)]" />
+          <span className="text-[13px]">
+            <span className="inline-flex items-center gap-1 font-semibold text-ink"><Mic className="w-3.5 h-3.5 text-brand" /> כתוב בקול שלי</span>
+            {voice.summary && <span className="text-ink-muted"> · {voice.summary}</span>}
+          </span>
+        </label>
+      )}
 
       <div className="mt-3">
         <button onClick={run} disabled={pending || !topic.trim()} className={BTN}>

@@ -6,9 +6,11 @@
 // Sibling of StyleLearner / CampaignBuilder; deliberately a peer card, not a hero.
 
 import { useState, useTransition } from 'react';
-import { Dna, Sparkles, Plus, X, Copy, Check, Loader2 } from 'lucide-react';
-import { analyzeContentDna } from '@/app/actions-performance';
+import { Dna, Sparkles, Plus, X, Copy, Check, Loader2, Mic } from 'lucide-react';
+import { analyzeContentDna, learnVoice } from '@/app/actions-performance';
 import type { ContentDna } from '@/lib/performance/content-dna';
+
+type Voice = { keyTells: string[]; signaturePassages: string[]; summary: string; tier: string; words: number; lang: 'he' | 'en' };
 
 const CARD = 'border border-border rounded-[14px] p-5 bg-soft/30';
 const INPUT = 'w-full bg-bg border border-border rounded-[8px] px-3 py-2 text-[14px] outline-none focus:border-brand';
@@ -35,6 +37,35 @@ export default function ContentDnaCard({ he = true }: { he?: boolean }) {
   const [error, setError] = useState('');
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
+  // Voice — learn HOW the operator sounds (not just the structure) and save it as their voice.
+  const [voice, setVoice] = useState<Voice | null>(null);
+  const [voiceMsg, setVoiceMsg] = useState('');
+  const [voicePending, startVoice] = useTransition();
+
+  function learnMyVoice() {
+    setVoiceMsg('');
+    setVoice(null);
+    startVoice(async () => {
+      async function preview() {
+        const r = await fetch('/api/voice', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ posts }),
+        }).then((x) => x.json()).catch(() => null);
+        if (r?.ok && r.voice) { setVoice(r.voice as Voice); setVoiceMsg('הקול נלמד (תצוגה מקומית — לא נשמר).'); return; }
+        setVoiceMsg(r?.error === 'missing_api_key' ? 'חסר ANTHROPIC_API_KEY בהגדרות הסביבה.' : 'צריך לפחות דוגמה אחת.');
+      }
+      try {
+        const res = await learnVoice(posts);
+        if ('voice' in res && res.voice) { setVoice(res.voice as Voice); setVoiceMsg('הקול שלך נלמד ונשמר ✅ כל פוסט חדש ייכתב בסגנון שלך.'); return; }
+        const err = (res as { error?: string }).error;
+        if (err === 'unauthorized' || err === 'no_workspace') { await preview(); return; }
+        setVoiceMsg(err === 'missing_api_key' ? 'חסר ANTHROPIC_API_KEY בהגדרות הסביבה.' : 'צריך לפחות דוגמה אחת.');
+      } catch {
+        await preview();
+      }
+    });
+  }
 
   const filled = posts.filter((p) => p.trim()).length;
   const setPost = (i: number, v: string) => setPosts((p) => p.map((x, j) => (j === i ? v : x)));
@@ -103,7 +134,7 @@ export default function ContentDnaCard({ he = true }: { he?: boolean }) {
         <span className="text-[11px] text-ink-muted mr-auto">כלי תוכן · נדבך אחד מ־Performance</span>
       </div>
       <p className="text-[13px] text-ink-secondary mb-4">
-        הדבק 2–8 פוסטים שעבדו — נחלץ את הנוסחה החוזרת ונבנה לך תבנית לפוסט הבא.
+        הדבק 2–8 פוסטים שעבדו — נחלץ את הנוסחה החוזרת, ונלמד את הקול האותנטי שלך כדי שכל פוסט חדש ייכתב בסגנון שלך.
       </p>
 
       {/* Inputs */}
@@ -140,6 +171,10 @@ export default function ContentDnaCard({ he = true }: { he?: boolean }) {
             <Plus className="w-4 h-4" /> פוסט
           </button>
         )}
+        <button onClick={learnMyVoice} disabled={voicePending || filled < 1} className={GHOST}>
+          {voicePending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+          {voicePending ? 'לומד קול…' : 'למד את הקול שלי'}
+        </button>
         <button onClick={() => setPosts([...EXAMPLES])} className={GHOST}>
           נסה עם דוגמאות
         </button>
@@ -147,6 +182,26 @@ export default function ContentDnaCard({ he = true }: { he?: boolean }) {
       </div>
 
       {error && <p className="text-[13px] text-red-400 mt-3">{error}</p>}
+
+      {/* Voice — the operator's own authentic voice, saved for every future post */}
+      {(voice || voiceMsg) && (
+        <div className="mt-3 rounded-[12px] border border-brand/30 bg-brand/5 p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Mic className="w-4 h-4 text-brand" />
+            <span className="text-[12px] font-bold text-brand">הקול שלך</span>
+            {voice?.tier && <span className="text-[10px] text-ink-muted">· דיוק {voice.tier === 'full' ? 'מלא' : voice.tier === 'strong' ? 'גבוה' : 'בסיסי'}</span>}
+          </div>
+          {voiceMsg && <p className="text-[12px] text-ink-secondary mb-1.5">{voiceMsg}</p>}
+          {voice?.summary && <p className="text-[13px] text-ink font-medium mb-1.5">{voice.summary}</p>}
+          {voice && voice.keyTells.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {voice.keyTells.map((t, i) => (
+                <span key={i} className="rounded-full bg-bg border border-border px-2.5 py-0.5 text-[11px] text-ink-secondary">{t}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Results */}
       {dna && (

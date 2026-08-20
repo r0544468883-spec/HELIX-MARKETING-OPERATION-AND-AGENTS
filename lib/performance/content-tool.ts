@@ -1,6 +1,7 @@
 import 'server-only';
 import { askJson } from './llm';
 import type { Genes } from './content-dna';
+import { voicePromptBlock, type VoiceProfile } from './voice';
 
 // Post builder + email writer/rewriter — the two content tools that sit next to Content DNA
 // inside the Performance module. Same Claude-backed pattern (askJson → null on no key).
@@ -13,6 +14,7 @@ export type BuildInput = {
   tone?: string;
   language?: 'he' | 'en';
   formula?: Partial<Genes> | null;
+  voice?: VoiceProfile | null; // the operator's own writing voice (from voice.ts) — few-shot style anchors
 };
 export type BuildResult = { post: string; hooks: string[] };
 
@@ -23,10 +25,13 @@ export async function buildPost(input: BuildInput): Promise<BuildResult | null> 
   const formulaLine = input.formula
     ? `עקוב אחרי הנוסחה: פתיח=${input.formula.opener ?? ''}, נושא=${input.formula.topic ?? ''}, פורמט=${input.formula.format ?? ''}, סיום=${input.formula.ending ?? ''}.`
     : 'בחר את המבנה הכי אפקטיבי לפלטפורמה.';
+  // The operator's own voice (if a profile was supplied) overrides the generic "authentic" default.
+  const voiceLine = voicePromptBlock(input.voice, input.language !== 'en');
   const system =
     `You are an elite ${lang} social copywriter who writes posts that sound like a real human, never like AI. ` +
     `Write for ${input.platform || 'general social'}. Tone: ${input.tone || 'authentic, direct'}. ` +
     `${formulaLine} כתוב תוכן טבעי, בלי קלישאות AI ובלי אימוג'ים מוגזמים. ` +
+    (voiceLine ? voiceLine + ' ' : '') +
     'Return ONLY JSON: {"post":"the full post text","hooks":["3 alternative opening-line hooks"]}';
   const r = await askJson<BuildResult>(system, `הנושא: ${topic}`, 1200);
   if (!r?.post) return null;

@@ -7,6 +7,7 @@ import { getConnector, type ChannelConfig, type AdRef } from '@/lib/performance/
 import type { Metric } from '@/lib/performance/scoring';
 import { learnStyleProfile } from '@/lib/performance/style-profile';
 import { analyzeDNA } from '@/lib/performance/content-dna';
+import { extractVoiceProfile, type VoiceProfile } from '@/lib/performance/voice';
 import { buildPost, handleEmail, type BuildInput, type EmailInput } from '@/lib/performance/content-tool';
 import { buildAndLaunch, type CampaignBrief } from '@/lib/performance/campaign-builder';
 
@@ -120,12 +121,83 @@ export async function analyzeContentDna(posts: string[]) {
   return { ok: true, dna };
 }
 
-// ── Post builder: topic (+ optional learned formula) → ready-to-post copy ──
-export async function buildPostAction(input: BuildInput) {
+// ── Voice: learn the operator's OWN authentic writing voice from pasted posts ──
+// Reads the same posts as Content DNA, but learns HOW they sound (Key Tells + signature
+// passages) and persists it per-workspace so every generated post/draft is in their voice.
+type VoiceRow = { key_tells: string[]; signature_passages: string[]; summary: string | null; words: number; tier: string; lang: string };
+function rowToVoice(r: VoiceRow | null | undefined): VoiceProfile | null {
+  if (!r) return null;
+  return {
+    keyTells: r.key_tells ?? [],
+    signaturePassages: r.signature_passages ?? [],
+    summary: r.summary ?? '',
+    words: Number(r.words) || 0,
+    tier: (r.tier as VoiceProfile['tier']) ?? 'basic',
+    lang: (r.lang as 'he' | 'en') ?? 'he',
+  };
+}
+
+export async function learnVoice(posts: string[]) {
+  const a = await auth();
+  if ('error' in a) return a;
+  const clean = (posts ?? []).map((p) => (p ?? '').trim()).filter(Boolean);
+  if (clean.length < 1) return { error: 'bad_request' as const };
+  const voice = await extractVoiceProfile(clean);
+  if (!voice) return { error: 'missing_api_key' as const };
+  await a.supabase.from('content_voice').upsert(
+    {
+      workspace_id: a.ws,
+      key_tells: voice.keyTells,
+      signature_passages: voice.signaturePassages,
+      summary: voice.summary,
+      words: voice.words,
+      tier: voice.tier,
+      lang: voice.lang,
+      learned_at: new Date().toISOString(),
+    },
+    { onConflict: 'workspace_id' }
+  );
+  revalidate();
+  return { ok: true, voice };
+}
+
+export async function getVoice() {
+  const a = await auth();
+  if ('error' in a) return a;
+  const { data } = await a.supabase
+    .from('content_voice')
+    .select('key_tells, signature_passages, summary, words, tier, lang')
+    .eq('workspace_id', a.ws)
+    .maybeSingle();
+  return { ok: true, voice: rowToVoice(data as VoiceRow | null) };
+}
+
+export async function clearVoice() {
+  const a = await auth();
+  if ('error' in a) return a;
+  await a.supabase.from('content_voice').delete().eq('workspace_id', a.ws);
+  revalidate();
+  return { ok: true };
+}
+
+async function loadWorkspaceVoice(supabase: SupabaseServer, ws: string): Promise<VoiceProfile | null> {
+  const { data } = await supabase
+    .from('content_voice')
+    .select('key_tells, signature_passages, summary, words, tier, lang')
+    .eq('workspace_id', ws)
+    .maybeSingle();
+  return rowToVoice(data as VoiceRow | null);
+}
+
+// ── Post builder: topic (+ optional learned formula + the operator's own voice) → copy ──
+export async function buildPostAction(input: BuildInput & { useVoice?: boolean }) {
   const a = await auth();
   if ('error' in a) return a;
   if (!input?.topic?.trim()) return { error: 'bad_request' as const };
-  const result = await buildPost(input);
+  // Default to writing in the saved voice unless the caller opts out or passes one inline.
+  let voice = input.voice ?? null;
+  if (!voice && input.useVoice !== false) voice = await loadWorkspaceVoice(a.supabase, a.ws);
+  const result = await buildPost({ ...input, voice });
   if (!result) return { error: 'missing_api_key' as const };
   return { ok: true, result };
 }

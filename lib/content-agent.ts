@@ -5,6 +5,7 @@
 // Server-only (reads ANTHROPIC_API_KEY). No SDK dependency — plain fetch.
 
 import { checkContentQuality, type ContentQualityResult } from './content-quality';
+import { voicePromptBlock, type VoiceProfile } from './performance/voice';
 
 const MODEL = process.env.CONTENT_MODEL || 'claude-sonnet-5';
 
@@ -67,21 +68,27 @@ export type ChannelDraft = { body: string; language: Lang; aiScore: number; cont
 export async function generateChannelDraft(
   brief: string,
   title: string,
-  channel: string
+  channel: string,
+  voice?: VoiceProfile | null
 ): Promise<ChannelDraft> {
   const cfg = CHANNEL_GUIDE[channel] ?? { lang: 'he' as Lang, guide: 'תוכן שיווקי קצר וברור.' };
+  const he = cfg.lang === 'he';
+  // The operator's own voice (if supplied) becomes a few-shot style anchor across both passes.
+  const voiceLine = voicePromptBlock(voice, he);
 
   // 1) channel-specific draft
   const draftSystem =
-    cfg.lang === 'he'
-      ? `אתה קופירייטר מנוסה. כתוב תוכן שיווקי עבור ${channel}. ${cfg.guide} כתוב בעברית תקנית ואנושית. החזר אך ורק את התוכן, בלי הקדמות.`
-      : `You are an expert copywriter. Write marketing content for ${channel}. ${cfg.guide} Return only the content, no preamble.`;
+    he
+      ? `אתה קופירייטר מנוסה. כתוב תוכן שיווקי עבור ${channel}. ${cfg.guide} כתוב בעברית תקנית ואנושית. ${voiceLine ? voiceLine + ' ' : ''}החזר אך ורק את התוכן, בלי הקדמות.`
+      : `You are an expert copywriter. Write marketing content for ${channel}. ${cfg.guide} ${voiceLine ? voiceLine + ' ' : ''}Return only the content, no preamble.`;
   let body = await claude(draftSystem, `כותרת: ${title}\nבריף: ${brief}`);
 
-  // 2) Hebrew branch — humanize + proofread ("Hebrew Content by Helix")
-  if (cfg.lang === 'he') {
+  // 2) Hebrew branch — humanize + proofread ("Hebrew Content by Helix"), voice-preserving.
+  if (he) {
     body = await claude(
-      'אתה עורך עברית. שכתב את הטקסט כך שיישמע אנושי-ישראלי טבעי (לא כמו בינה מלאכותית), ותקן כל שגיאת כתיב או דקדוק. שמור על המשמעות, הטון והאורך. החזר אך ורק את הטקסט המתוקן.',
+      'אתה עורך עברית. שכתב את הטקסט כך שיישמע אנושי-ישראלי טבעי (לא כמו בינה מלאכותית), ותקן כל שגיאת כתיב או דקדוק. שמור על המשמעות, הטון והאורך. ' +
+        (voiceLine ? voiceLine + ' ' : '') +
+        'החזר אך ורק את הטקסט המתוקן.',
       body
     );
   }
