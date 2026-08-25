@@ -8,6 +8,7 @@ import SmoothScroll from '@/components/SmoothScroll';
 import CursorTrail from '@/components/CursorTrail';
 import FloatingBackground from '@/components/FloatingBackground';
 import Providers from '@/components/Providers';
+import HelixCommandBar from '@/components/HelixCommandBar';
 import { getDict, isRtl, locales, type Locale } from '@/lib/i18n';
 
 const heebo = Heebo({
@@ -70,6 +71,7 @@ export default async function LocaleLayout({
         <div className="relative z-10">
           <Footer locale={locale} />
         </div>
+        <HelixCommandBar />
       </body>
     </html>
   );

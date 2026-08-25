@@ -10,6 +10,7 @@ import {
   ZERO_METRICS,
 } from './scoring';
 import { coldStartScore } from './cold-start';
+import { detectFatigue, rankFatigue, type FatigueSnapshot, type FatigueVerdict } from './fatigue';
 import { getConnector, type AdRef, type ChannelConfig } from './connectors';
 import { notifyActivity } from './notify';
 import { reviewBudgetDecision } from '@/lib/agents/ops/department-chief';
@@ -163,6 +164,54 @@ export async function scoreWorkspace(db: DB, workspaceId: string): Promise<{ set
   // Rank best-first by blended score.
   scored.sort((a, b) => b.score.blended - a.score.blended);
   return { settings, scored };
+}
+
+export type FatigueFinding = { creativeId: string; name: string; platform: string; verdict: FatigueVerdict };
+
+/**
+ * Creative-fatigue scan (ops-creative-fatigue-scanner skill). READ-ONLY: reads the FULL
+ * creative_metrics time-series per live creative — not just the latest snapshot the scorer
+ * uses — and runs the pure detector. Never pauses, edits, or records a decision; it returns
+ * a ranked finding list for a human / the autonomy gate to act on. Only live creatives are
+ * scanned (drafts have no in-flight data; retired/paused aren't spending).
+ */
+export async function scanWorkspaceFatigue(db: DB, workspaceId: string): Promise<FatigueFinding[]> {
+  const { data: creativesData } = await db
+    .from('creatives')
+    .select('id, name, platform, status')
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'live');
+  const creatives = (creativesData ?? []) as Pick<CreativeRow, 'id' | 'name' | 'platform'>[];
+  if (creatives.length === 0) return [];
+
+  // Full time-series (ascending) for these creatives, in one query.
+  const { data: metricsData } = await db
+    .from('creative_metrics')
+    .select('creative_id, spend, impressions, clicks, conversions, revenue, as_of')
+    .in('creative_id', creatives.map((c) => c.id))
+    .order('as_of', { ascending: true });
+
+  const seriesById = new Map<string, FatigueSnapshot[]>();
+  for (const r of (metricsData ?? []) as (FatigueSnapshot & { creative_id: string; as_of: string })[]) {
+    const arr = seriesById.get(r.creative_id) ?? [];
+    arr.push({
+      asOf: r.as_of,
+      spend: Number(r.spend) || 0,
+      impressions: Number(r.impressions) || 0,
+      clicks: Number(r.clicks) || 0,
+      conversions: Number(r.conversions) || 0,
+      revenue: Number(r.revenue) || 0,
+    });
+    seriesById.set(r.creative_id, arr);
+  }
+
+  const findings: FatigueFinding[] = creatives.map((c) => ({
+    creativeId: c.id,
+    name: c.name,
+    platform: c.platform,
+    verdict: detectFatigue(seriesById.get(c.id) ?? []),
+  }));
+  return rankFatigue(findings.map((f) => ({ ...f, verdict: f.verdict }))) as FatigueFinding[];
 }
 
 /**

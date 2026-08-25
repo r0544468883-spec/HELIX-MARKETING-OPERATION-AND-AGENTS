@@ -3,6 +3,9 @@ import { metaConnector } from './meta';
 import { tiktokConnector } from './tiktok';
 import { googleConnector } from './google';
 import { outbrainConnector } from './outbrain';
+import { taboolaConnector } from './taboola';
+import { linkedinConnector } from './linkedin';
+import { microsoftConnector } from './microsoft';
 
 export type {
   AdConnector,
@@ -36,6 +39,19 @@ const BY_ALIAS: Record<string, AdConnector> = {
   'גוגל': googleConnector,
   outbrain: outbrainConnector,
   'אאוטבריין': outbrainConnector,
+  taboola: taboolaConnector,
+  'טבולה': taboolaConnector,
+  'טאבולה': taboolaConnector,
+  linkedin: linkedinConnector,
+  'linkedin ads': linkedinConnector,
+  'לינקדאין': linkedinConnector,
+  'לינקדין': linkedinConnector,
+  microsoft: microsoftConnector,
+  'microsoft ads': microsoftConnector,
+  'bing': microsoftConnector,
+  'bing ads': microsoftConnector,
+  'מיקרוסופט': microsoftConnector,
+  'בינג': microsoftConnector,
 };
 
 /** Resolve the connector for a platform label, or null if we don't support it. */
@@ -44,4 +60,4 @@ export function getConnector(platform: string): AdConnector | null {
 }
 
 /** Platforms with a real management connector (for UI hints / capability checks). */
-export const SUPPORTED_PLATFORMS = ['Meta', 'TikTok', 'Google', 'Outbrain'] as const;
+export const SUPPORTED_PLATFORMS = ['Meta', 'TikTok', 'Google', 'Outbrain', 'Taboola', 'LinkedIn', 'Microsoft'] as const;

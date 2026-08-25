@@ -1,4 +1,5 @@
 import 'server-only';
+import { clean } from '@/lib/clean-text';
 
 // Small shared Claude helper for the performance module (style learning + campaign
 // builder). Plain fetch, no SDK — matches cold-start.ts / content-agent.ts. Returns a
@@ -21,7 +22,9 @@ export async function askJson<T>(system: string, user: string | Block[], maxToke
     });
     if (!res.ok) return null;
     const json = (await res.json()) as { content?: { text?: string }[] };
-    const text = json.content?.[0]?.text ?? '';
+    // Strip invisible/watermark chars from the model output before parsing so every
+    // prose field inside the JSON (post, email body, DNA labels…) comes out clean.
+    const text = clean(json.content?.[0]?.text ?? '');
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start === -1 || end === -1) return null;
