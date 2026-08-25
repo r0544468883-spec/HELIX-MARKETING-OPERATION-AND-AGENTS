@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildEmailHtml } from '@/lib/email';
+import { filterSuppressed } from '@/lib/email-suppression';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://helix-stage.vercel.app';
 const RESEND_FROM = process.env.RESEND_FROM ?? 'HELIX STAGE <onboarding@resend.dev>';
@@ -783,7 +784,9 @@ export async function deliverCampaign(
   campaign: Record<string, unknown>,
   locale: string
 ): Promise<number> {
-  const recipients = await buildRecipients(admin, campaign);
+  const allRecipients = await buildRecipients(admin, campaign);
+  // Suppression-first: never send to unsubscribed or bounced addresses.
+  const recipients = await filterSuppressed(admin, allRecipients);
   if (recipients.length === 0) {
     await admin.from('email_campaigns').update({ status: 'sent', recipients: 0, sent_at: new Date().toISOString() }).eq('id', campaign.id as string);
     return 0;
