@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Plus, Play, Check, X, TrendingUp, Pause, Sparkles, Loader2 } from 'lucide-react';
+import { useFlip } from '@/lib/motion';
 import {
   addCreative,
   setMetric,
@@ -64,6 +65,10 @@ export default function PerformanceDashboard({
   const [pending, start] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
   const s = settings ?? { metric: 'cpa' as Metric, execution_mode: 'brain' as const, autonomy: 'approve' as const, pause_below: 35, promote_above: 70 };
+
+  // FLIP reflow (@helix/motion): when switching the objective metric re-scores
+  // and reorders the creative pool, rows FLOW to their new rank instead of jumping.
+  const scoreBodyRef = useFlip<HTMLTableSectionElement>([s.metric, scored.map((c) => c.id).join(',')]);
 
   const t = he
     ? {
@@ -223,9 +228,9 @@ export default function PerformanceDashboard({
                   <Th he={he}></Th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={scoreBodyRef}>
                 {scored.map((c) => (
-                  <tr key={c.id} className="bg-soft/40">
+                  <tr key={c.id} data-flip-id={c.id} className="bg-soft/40">
                     <td className="px-3 py-2.5 rounded-s-[10px]">
                       <div className="font-semibold text-ink">{c.name}</div>
                       {c.coldReason && <div className="text-[12px] text-ink-secondary truncate max-w-[240px]">{c.coldReason}</div>}
