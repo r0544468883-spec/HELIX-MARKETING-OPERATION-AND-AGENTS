@@ -6,6 +6,7 @@ import { outbrainConnector } from './outbrain';
 import { taboolaConnector } from './taboola';
 import { linkedinConnector } from './linkedin';
 import { microsoftConnector } from './microsoft';
+import { dv360Connector } from './dv360';
 
 export type {
   AdConnector,
@@ -52,6 +53,10 @@ const BY_ALIAS: Record<string, AdConnector> = {
   'bing ads': microsoftConnector,
   'מיקרוסופט': microsoftConnector,
   'בינג': microsoftConnector,
+  dv360: dv360Connector,
+  'dv 360': dv360Connector,
+  'display & video 360': dv360Connector,
+  'google dv360': dv360Connector,
 };
 
 /** Resolve the connector for a platform label, or null if we don't support it. */
@@ -60,4 +65,4 @@ export function getConnector(platform: string): AdConnector | null {
 }
 
 /** Platforms with a real management connector (for UI hints / capability checks). */
-export const SUPPORTED_PLATFORMS = ['Meta', 'TikTok', 'Google', 'Outbrain', 'Taboola', 'LinkedIn', 'Microsoft'] as const;
+export const SUPPORTED_PLATFORMS = ['Meta', 'TikTok', 'Google', 'Outbrain', 'Taboola', 'LinkedIn', 'Microsoft', 'DV360'] as const;

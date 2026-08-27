@@ -8,7 +8,7 @@ import { saveChannelConnection } from '@/app/actions-ops';
 
 type Field = { key: string; label: string; list?: boolean; secret?: boolean };
 
-const CHANNELS: { channel: string; fields: Field[]; help: string }[] = [
+const CHANNELS: { channel: string; fields: Field[]; help: string; notice?: string }[] = [
   {
     channel: 'טלגרם',
     help: 'צרו בוט אצל @BotFather, הדביקו את ה-token, ואת ה-chat id של הקבוצה/הערוץ.',
@@ -205,6 +205,17 @@ const CHANNELS: { channel: string; fields: Field[]; help: string }[] = [
     ],
   },
   {
+    channel: 'DV360',
+    help: 'Display & Video 360 — ה-DSP של גוגל לרכש פרוגרמטי במלאי פרימיום (כולל אתרי חדשות ישראליים דרך Deal ID: PMP / Programmatic Guaranteed / Preferred).',
+    notice:
+      'צריך חשבון DV360 פעיל לפני החיבור. DV360 אינו פתוח לרישום עצמי, הוא נפתח דרך שותף מוסמך של Google (Google Certified Partner) או מנהל חשבון. פתחו Advertiser תחת ה-Partner, קבלו Advertiser ID, ואז חברו כאן. עד שיש חשבון, ערוץ ה-DV360 יישאר לא פעיל.',
+    fields: [
+      { key: 'partner_id', label: 'Partner ID' },
+      { key: 'advertiser_id', label: 'Advertiser ID' },
+      { key: 'access_token', label: 'OAuth Access Token', secret: true },
+    ],
+  },
+  {
     channel: 'Nostr',
     help: 'nsec (מפתח פרטי) + רשימת relays (מופרד בפסיק).',
     fields: [
@@ -236,6 +247,7 @@ export default function ChannelConnections({ initial }: { initial: Conn[] }) {
           channel={c.channel}
           fields={c.fields}
           help={c.help}
+          notice={c.notice}
           existing={byChannel.get(c.channel)}
         />
       ))}
@@ -247,11 +259,13 @@ function ChannelCard({
   channel,
   fields,
   help,
+  notice,
   existing,
 }: {
   channel: string;
   fields: Field[];
   help: string;
+  notice?: string;
   existing?: Conn;
 }) {
   const [values, setValues] = useState<Record<string, string>>(
@@ -284,6 +298,15 @@ function ChannelCard({
         </label>
       </div>
       <p className="text-[13px] text-ink-muted mb-3">{help}</p>
+      {notice && (
+        <div
+          role="note"
+          className="flex gap-2 items-start bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 rounded-[10px] px-3 py-2.5 mb-3 text-[13px] leading-relaxed"
+        >
+          <span aria-hidden className="mt-[1px] shrink-0">⚠️</span>
+          <span>{notice}</span>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         {fields.map((f) => (
           <label key={f.key} className="flex flex-col gap-1">
