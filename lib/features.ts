@@ -22,6 +22,7 @@ export type FeatureId =
   | 'templates'
   | 'coach'
   | 'performance'
+  | 'media-buying'
   | 'developer';
 
 export type Locale = 'he' | 'en';
@@ -50,6 +51,8 @@ export const FEATURES: FeatureDef[] = [
   { id: 'coach',      path: '/coach',       label: { he: 'מאמן',      en: 'Coach' },      defaultOn: true, hideSm: true },
   // New module — OFF by default so existing workspaces don't suddenly see it.
   { id: 'performance', path: '/performance', label: { he: 'פרפורמנס', en: 'Performance' }, defaultOn: false, hideSm: true },
+  // Media Buyers module — Managed lane (publisher deals) + Auto lane. OFF by default.
+  { id: 'media-buying', path: '/media-buying/deals', label: { he: 'רכש מדיה', en: 'Media Buying' }, defaultOn: false, hideSm: true },
   // Developer API (headless / Pull-ISR distribution) — OFF by default.
   { id: 'developer', path: '/developer', label: { he: 'Developer API', en: 'Developer API' }, defaultOn: false, hideSm: true },
 ];

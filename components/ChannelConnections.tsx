@@ -213,6 +213,7 @@ const CHANNELS: { channel: string; fields: Field[]; help: string; notice?: strin
       { key: 'partner_id', label: 'Partner ID' },
       { key: 'advertiser_id', label: 'Advertiser ID' },
       { key: 'access_token', label: 'OAuth Access Token', secret: true },
+      { key: 'report_query_id', label: 'Report Query ID (ל-insights, אופציונלי)' },
     ],
   },
   {
