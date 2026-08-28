@@ -6,6 +6,7 @@
 import { claude } from '@/lib/engagement/ai';
 import { parseJson } from '../json';
 import type { BudgetReview, BudgetVerdict } from '../contract';
+import { withSkills } from '../../../skills/registry';
 
 export async function critiqueBudget(input: {
   action: string;         // 'pause' | 'scale_up'
@@ -31,7 +32,7 @@ verdict: "hold" (עצור לאישור-אדם) או "apply" (בטוח לביצו
 ציון: ${input.score}/100 · ביטחון: ${(input.confidence * 100) | 0}% · הוצאה אחרונה: ${input.spend}
 נימוק המערכת: ${input.reason}`;
 
-  const raw = await claude(system, user, 300);
+  const raw = await claude(withSkills(system, ['cro-conversion', 'finance-metrics']), user, 300);
   const p = parseJson<{ verdict?: string; safeToApply?: boolean; concerns?: string[]; note?: string }>(raw);
   if (!p) return null;
   const verdict: BudgetVerdict = p.verdict === 'apply' ? 'apply' : 'hold';

@@ -6,6 +6,7 @@
 import { claude } from '@/lib/engagement/ai';
 import { parseJson } from '../json';
 import type { CommentReview, CommentVerdict } from '../contract';
+import { withSkills } from '../../../skills/registry';
 
 export async function critiqueDm(reply: string, incoming: string): Promise<CommentReview | null> {
   const system = `אתה מבקר brand-safety קשוח לתשובות DM שהבוט עומד לשלוח אוטומטית בשם העסק בשיחה פרטית עם לקוח. תפקידך למצוא סיכון — לא לשבח. ברירת-מחדל: חשדנות.
@@ -21,7 +22,7 @@ verdict: "block" (מסוכן/לא-הולם), "revise" (בסיס סביר אך צ
 
   const user = `ההודעה שהתקבלה מהלקוח:\n"""${(incoming || '').slice(0, 600)}"""\n\nהתשובה שהבוט עומד לשלוח:\n"""${reply}"""`;
 
-  const raw = await claude(system, user, 350);
+  const raw = await claude(withSkills(system, ['social-engagement']), user, 350);
   const p = parseJson<{ verdict?: string; safeToAutoPost?: boolean; risks?: string[]; note?: string }>(raw);
   if (!p) return null;
   const verdict: CommentVerdict = p.verdict === 'post' || p.verdict === 'revise' ? p.verdict : 'block';

@@ -3,6 +3,7 @@
 // Turns the Critic from a pure gate into a collaborator: draft → critique →
 // revise, before the auto-post decision.
 import { claude } from '@/lib/engagement/ai';
+import { withSkills } from '../../../skills/registry';
 
 export async function reviseComment(
   draft: string,
@@ -19,7 +20,7 @@ export async function reviseComment(
 התגובה הנוכחית:
 ${draft}`;
 
-  const out = await claude(system, user, 250);
+  const out = await claude(withSkills(system, ['social-engagement', 'helix-brand-voice']), user, 250);
   const trimmed = out?.trim();
   return trimmed ? trimmed : null;
 }

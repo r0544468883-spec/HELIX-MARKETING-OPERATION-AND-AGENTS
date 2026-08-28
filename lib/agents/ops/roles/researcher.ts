@@ -4,6 +4,7 @@
 // so the team can tread carefully or skip. It analyses; it does not write.
 import { claude } from '@/lib/engagement/ai';
 import { parseJson } from '../json';
+import { withSkills } from '../../../skills/registry';
 
 export interface PostBrief {
   angle: string; // the most relevant, useful (non-salesy) angle to engage on
@@ -22,7 +23,7 @@ export async function analyzePost(postText: string): Promise<PostBrief | null> {
 - אל תמציא; הישען על הפוסט בלבד.
 החזר JSON בלבד: {"angle":"","tone":"","sensitive":false,"hook":""}`;
 
-  const raw = await claude(system, `הפוסט:\n"""${(postText || '').slice(0, 800)}"""`, 300);
+  const raw = await claude(withSkills(system, ['social-engagement']), `הפוסט:\n"""${(postText || '').slice(0, 800)}"""`, 300);
   const p = parseJson<PostBrief>(raw);
   if (!p) return null;
   return {

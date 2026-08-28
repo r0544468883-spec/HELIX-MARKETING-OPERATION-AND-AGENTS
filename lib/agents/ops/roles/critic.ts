@@ -6,6 +6,7 @@
 import { claude } from '@/lib/engagement/ai';
 import type { CommentReview } from '../contract';
 import { parseJson } from '../json';
+import { withSkills } from '../../../skills/registry';
 
 export async function critique(
   draft: string,
@@ -25,6 +26,6 @@ verdict: "block" (מסוכן/לא-הולם), "revise" (בסיס סביר אך צ
 
   const user = `קול-מותג: ${brandVoice}\n\nהפוסט של האדם האחר:\n"""${(postText || '').slice(0, 800)}"""\n\nהתגובה שהבוט מתכוון לפרסם:\n"""${draft}"""`;
 
-  const raw = await claude(system, user, 400);
+  const raw = await claude(withSkills(system, ['social-engagement']), user, 400);
   return parseJson<CommentReview>(raw);
 }
