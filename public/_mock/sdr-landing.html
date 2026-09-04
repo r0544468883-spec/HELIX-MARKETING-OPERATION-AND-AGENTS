@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HELIX SDR · צוות הסוכנים שממלא לך את היומן</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800;900&family=Rubik:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+<style>
+  :root{
+    --bg:#0C1117; --surface:#14181E; --soft:#171C23;
+    --ink:#E6EDF3; --ink-2:#B7C2CE; --ink-muted:#7E8A98;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.15);
+    --brand:#38BDF8; --brand-hover:#0EA5E9; --neon:#7DD3FC;
+    --radius:18px;
+    --spring:cubic-bezier(.34,1.56,.64,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:'Heebo',system-ui,sans-serif;
+    line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,.display{font-family:'Rubik','Heebo',sans-serif;font-weight:800;line-height:1.14;letter-spacing:-.01em}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1180px;margin-inline:auto;padding-inline:24px}
+  .brand-text{color:var(--brand)} .neon-text{color:var(--neon)}
+  section{padding-block:104px}
+
+  /* glow */
+  .glow-bg{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+  .glow-bg::before{content:"";position:absolute;top:-25%;inset-inline-start:50%;transform:translateX(-50%);
+    width:760px;height:760px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,.20),transparent 62%);filter:blur(34px)}
+
+  /* nav */
+  header{position:sticky;top:0;z-index:100;backdrop-filter:blur(14px);background:rgba(18,20,19,.72);border-bottom:1px solid var(--border)}
+  nav{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .logo{display:flex;align-items:center;gap:9px;font-family:'Rubik';font-weight:800;font-size:21px}
+  .logo .dot{width:11px;height:11px;border-radius:50%;background:var(--brand);box-shadow:0 0 14px var(--brand);transition:transform .6s var(--spring)}
+  .logo:hover .dot{transform:rotate(180deg) scale(1.4)}
+  .nav-links{display:flex;gap:30px;align-items:center}
+  .nav-links a{color:var(--ink-2);font-size:15px;font-weight:500;transition:color .2s;position:relative}
+  .nav-links a::after{content:"";position:absolute;inset-inline:0;bottom:-4px;height:2px;background:var(--brand);transform:scaleX(0);transform-origin:center;transition:transform .25s var(--spring)}
+  .nav-links a:hover{color:var(--ink)} .nav-links a:hover::after{transform:scaleX(1)}
+  .nav-cta{display:flex;gap:12px;align-items:center}
+  .btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;
+    padding:0 22px;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;border:1px solid transparent;
+    transition:transform .2s var(--spring),box-shadow .2s,background-color .2s;font-family:inherit}
+  .btn-primary{background:var(--brand);color:#06130D}
+  .btn-primary:hover{background:var(--brand-hover);transform:translateY(-2px);box-shadow:0 8px 24px rgba(56,189,248,.30)}
+  .btn-ghost{background:transparent;color:var(--ink);border-color:var(--border-strong)}
+  .btn-ghost:hover{border-color:var(--brand);color:var(--brand)}
+  .lang{color:var(--ink-muted);font-size:14px;font-weight:600}
+  .burger{display:none;background:none;border:0;color:var(--ink);font-size:26px;cursor:pointer}
+
+  /* ===== HERO ===== */
+  .hero{position:relative;padding:80px 0 64px;text-align:center}
+  .hero .wrap{position:relative;z-index:1}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border:1px solid var(--border-strong);
+    border-radius:999px;font-size:13.5px;color:var(--ink-2);background:var(--surface);margin-bottom:28px;
+    opacity:0;transform:translateY(10px);animation:fadeUp .6s var(--spring) .1s forwards}
+  .pill .live{width:8px;height:8px;border-radius:50%;background:var(--neon);box-shadow:0 0 10px var(--neon);animation:pulse 1.8s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  @keyframes fadeUp{to{opacity:1;transform:none}}
+  .hero h1{font-size:clamp(34px,6vw,64px);margin-bottom:22px}
+  /* hero unfold: each line masked, inner slides up with spring stagger */
+  .unfold{display:block;overflow:hidden}
+  .unfold>span{display:block;transform:translateY(112%);animation:unfold .9s var(--spring) forwards}
+  .unfold:nth-child(1)>span{animation-delay:.15s}
+  .unfold:nth-child(2)>span{animation-delay:.30s}
+  @keyframes unfold{to{transform:none}}
+  .from{color:var(--ink-muted);font-weight:700}
+  .hl{position:relative;white-space:nowrap;color:var(--brand)}
+  .hl::after{content:"";position:absolute;inset-inline:0;bottom:4px;height:12px;background:rgba(56,189,248,.26);z-index:-1;border-radius:4px;
+    transform:scaleX(0);transform-origin:right;animation:swipe .5s ease 1s forwards}
+  @keyframes swipe{to{transform:scaleX(1)}}
+  .hero p.sub{font-size:clamp(17px,2.4vw,21px);color:var(--ink-2);max-width:660px;margin:0 auto 34px;opacity:0;animation:fadeUp .7s var(--spring) .55s forwards}
+  .hero-cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:18px;opacity:0;animation:fadeUp .7s var(--spring) .7s forwards}
+  .hero-cta .btn{min-height:52px;padding:0 30px;font-size:16.5px}
+  .micro{font-size:13.5px;color:var(--ink-muted);opacity:0;animation:fadeUp .7s var(--spring) .85s forwards}
+
+  /* trust */
+  .trust{margin-top:44px;opacity:0;animation:fadeUp .8s var(--spring) 1s forwards}
+  .trust p{font-size:12.5px;letter-spacing:.14em;color:var(--ink-muted);text-transform:uppercase;margin-bottom:16px}
+  .trust-logos{display:flex;gap:34px;justify-content:center;align-items:center;flex-wrap:wrap}
+  .trust-logos span{font-family:'Rubik';font-weight:700;font-size:18px;color:var(--ink-2);filter:grayscale(1) opacity(.7);transition:filter .25s}
+  .trust-logos span:hover{filter:grayscale(0) opacity(1)}
+
+  /* dashboard mock */
+  .mock{margin:54px auto 0;max-width:960px;border:1px solid var(--border-strong);border-radius:22px;
+    background:linear-gradient(180deg,var(--surface),var(--bg));overflow:hidden;box-shadow:0 55px 100px rgba(0,0,0,.6);
+    transform-style:preserve-3d;transform-origin:center;will-change:transform;transform:rotateX(60deg) scale(.9)}
+  .mock-bar{display:flex;align-items:center;gap:8px;padding:13px 18px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.2)}
+  .mock-bar i{width:11px;height:11px;border-radius:50%;background:#3a3d3c;display:inline-block}
+  .mock-bar i:first-child{background:#ff5f57}.mock-bar i:nth-child(2){background:#febc2e}.mock-bar i:nth-child(3){background:#28c840}
+  .mock-bar .url{margin-inline-start:14px;font-size:12.5px;color:var(--ink-muted)}
+  .mock-body{display:grid;grid-template-columns:200px 1fr;min-height:340px}
+  .mock-side{border-inline-end:1px solid var(--border);padding:18px 14px;background:rgba(0,0,0,.12)}
+  .mock-side .m-logo{font-family:'Rubik';font-weight:800;margin-bottom:20px;font-size:15px}
+  .mock-side a{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;font-size:13.5px;color:var(--ink-muted);margin-bottom:3px}
+  .mock-side a.on{background:rgba(56,189,248,.14);color:var(--brand)}
+  .mock-side a .ic{width:15px;height:15px;border-radius:4px;background:currentColor;opacity:.7}
+  .mock-main{padding:22px}
+  .mock-main h4{font-size:15px;margin-bottom:16px;color:var(--ink)}
+  .m-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+  .m-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .m-card .lbl{font-size:11.5px;color:var(--ink-muted);margin-bottom:6px}
+  .m-card .val{font-family:'Rubik';font-weight:800;font-size:22px}
+  .m-card .val.up{color:var(--neon)}
+  .m-bars{display:flex;align-items:flex-end;gap:9px;height:120px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+  .m-bars .b{flex:1;background:linear-gradient(180deg,var(--brand),rgba(56,189,248,.25));border-radius:6px 6px 3px 3px;height:0;transition:height .9s var(--spring)}
+  .mock-shot{display:block;width:100%;height:auto}
+  .tilt{transition:transform .35s var(--spring);will-change:transform}
+  /* numbers always LTR so the minus sits on the left (correct in Hebrew) */
+  .stat,.band .n,.price .amt,.m-card .val,.rev .stat{direction:ltr;unicode-bidi:isolate}
+  /* reclined "laid-down screen" rig (ported from ProductScreens) */
+  .mock-stage{perspective:1400px;perspective-origin:50% 40%}
+
+  /* ===== how-it-works: timeline + steps lottie ===== */
+  .how-layout{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+  .how-lottie{max-width:400px;margin-inline:auto;width:100%;filter:hue-rotate(40deg) saturate(1.25) brightness(1.02)}
+  .how-lottie>div{width:100%;aspect-ratio:4/3}
+  .how-lottie svg{display:block;width:100%!important;height:100%!important}
+  .timeline2{position:relative;padding-inline-start:30px}
+  .timeline2::before{content:"";position:absolute;inset-inline-start:6px;top:6px;bottom:6px;width:2px;background:var(--border-strong)}
+  .tl-fill{position:absolute;inset-inline-start:6px;top:6px;height:calc(100% - 12px);width:2px;background:var(--brand);
+    transform-origin:top;transform:scaleY(0);transition:transform .12s linear}
+  .tl-step{position:relative;padding-bottom:32px;opacity:.4;transition:opacity .45s var(--spring)}
+  .tl-step.active{opacity:1}
+  .tl-step:last-child{padding-bottom:0}
+  .tl-dot{position:absolute;inset-inline-start:-30px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--bg);
+    border:2px solid var(--brand);box-shadow:0 0 0 4px rgba(56,189,248,.1);transition:background .3s,box-shadow .3s}
+  .tl-step.active .tl-dot{background:var(--brand);box-shadow:0 0 0 5px rgba(56,189,248,.25)}
+  .tl-num{font-family:'Rubik';font-weight:800;color:var(--brand);font-size:13px;letter-spacing:.05em;margin-bottom:4px}
+  .tl-step h3{font-size:18px;margin-bottom:6px}
+  .tl-step p{color:var(--ink-2);font-size:14.5px}
+
+  /* bundle discount badge */
+  .price .save{position:absolute;top:16px;inset-inline-end:16px;font-size:11px;font-weight:700;color:var(--neon);
+    background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.3);padding:3px 9px;border-radius:999px}
+  .price .seats{font-size:13px;color:var(--brand);font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:6px}
+  .price .old{font-size:15px;color:var(--ink-muted);text-decoration:line-through;margin-inline-start:8px;font-weight:600}
+
+  /* ===== offer bar (above the fold) ===== */
+  .offerbar{border-block:1px solid var(--border);background:linear-gradient(90deg,rgba(56,189,248,.12),transparent)}
+  .offerbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:16px;flex-wrap:wrap}
+  .ob-left{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .ob-result{font-family:'Rubik';font-weight:800;font-size:17px;color:var(--ink)}
+  .ob-result b{color:var(--brand)}
+  .ob-badge{font-size:12.5px;color:var(--brand);border:1px solid rgba(56,189,248,.35);background:rgba(56,189,248,.1);padding:4px 11px;border-radius:999px}
+  .ob-cta{display:inline-flex;align-items:center;gap:8px;min-height:46px;padding:0 22px;border-radius:12px;background:var(--brand);color:#06121a;font-weight:700;transition:background .2s,transform .2s}
+  .ob-cta:hover{background:var(--brand-hover);transform:translateY(-1px)}
+
+  /* ===== lead-capture form ===== */
+  .lead{padding-block:88px}
+  .lead .wrap{max-width:940px}
+  .lead-card{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px}
+  .lead-card.soft{background:var(--soft)}
+  .lead-eyebrow{color:var(--brand);font-weight:700;font-size:14px;margin-bottom:10px}
+  .lead-card h2{font-size:clamp(24px,3.5vw,32px);margin-bottom:8px}
+  .lead-sub{color:var(--ink-2);font-size:16px;margin-bottom:24px}
+  .ff{position:relative;margin-bottom:14px}
+  .ff input{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:12px;padding:22px 14px 8px;color:var(--ink);font-family:inherit;font-size:15px;min-height:56px}
+  .ff input:focus{outline:none;border-color:var(--brand)}
+  .ff label{position:absolute;inset-inline-start:15px;top:17px;color:var(--ink-muted);font-size:15px;pointer-events:none;transition:.18s var(--spring)}
+  .ff input:focus+label,.ff input:not(:placeholder-shown)+label{top:8px;font-size:11px;color:var(--brand)}
+  .lead-check{display:flex;gap:9px;align-items:flex-start;margin:4px 0 18px;font-size:13.5px;color:var(--ink-2);cursor:pointer}
+  .lead-check input{margin-top:3px;accent-color:var(--brand);width:16px;height:16px;flex:none}
+  .lead-actions{display:flex;gap:12px;flex-wrap:wrap}
+  .lead-submit{flex:1;min-width:150px;min-height:50px;border:0;border-radius:12px;background:var(--brand);color:#06121a;font-weight:700;font-size:15.5px;cursor:pointer;font-family:inherit;transition:background .2s,transform .2s}
+  .lead-submit:hover{background:var(--brand-hover);transform:translateY(-1px)}
+  .lead-wa{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 20px;border-radius:12px;background:#25D366;color:#062e15;font-weight:700;font-size:15px;text-decoration:none;transition:filter .2s,transform .2s}
+  .lead-wa:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .lead-visual{border-radius:16px;min-height:250px;background:radial-gradient(circle at 30% 25%,rgba(56,189,248,.28),transparent 62%),var(--bg);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
+  .lead-visual .big{font-size:56px}
+  .lead-visual .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .lead-visual .chips span{font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--border);padding:5px 11px;border-radius:999px}
+  .lead-success{text-align:center;padding:34px 10px}
+  .lead-success .ic{font-size:44px;margin-bottom:10px}
+  .lead-success h3{font-size:22px;margin-bottom:6px}
+  .lead-success p{color:var(--ink-2)}
+  /* prominent lead card under the hero screen */
+  .lead-hero .lead-card{border-color:rgba(56,189,248,.5);box-shadow:0 0 0 1px rgba(56,189,248,.35),0 30px 70px rgba(56,189,248,.12)}
+  .cta-wrap{position:relative;flex:1;min-width:150px;display:flex}
+  .cta-wrap .lead-submit{width:100%}
+  .lead-hero .lead-submit{animation:btnPulse 3.6s ease-in-out infinite}
+  @keyframes btnPulse{0%,42%,68%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}52%{box-shadow:0 0 0 8px rgba(56,189,248,.25)}}
+  .demo-cursor{position:absolute;z-index:6;inset-inline-start:50%;top:50%;width:24px;height:24px;pointer-events:none;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.5));animation:cursorDemo 3.6s cubic-bezier(.5,0,.2,1) infinite}
+  @keyframes cursorDemo{
+    0%{transform:translate(-10px,46px) scale(1);opacity:0}
+    12%{opacity:1}
+    40%{transform:translate(-12px,-4px) scale(1)}
+    50%{transform:translate(-12px,-4px) scale(.72)}
+    60%{transform:translate(-12px,-4px) scale(1)}
+    88%{transform:translate(-12px,-4px) scale(1);opacity:1}
+    100%{transform:translate(-10px,46px) scale(1);opacity:0}}
+  @media(prefers-reduced-motion:reduce){.demo-cursor,.lead-hero .lead-submit{animation:none}.demo-cursor{display:none}}
+
+  /* ===== fixed side buttons ===== */
+  .fab{position:fixed;bottom:22px;z-index:120;display:inline-flex;align-items:center;gap:9px;min-height:52px;padding:0 20px;
+    border-radius:999px;font-weight:700;font-size:15px;box-shadow:0 12px 32px rgba(0,0,0,.45);cursor:pointer;border:0;font-family:inherit;
+    text-decoration:none;transition:transform .2s var(--spring),box-shadow .2s}
+  .fab:hover{transform:translateY(-2px)}
+  .fab-wa{inset-inline-start:22px;background:#25D366;color:#062e15}
+  .fab-pkg{inset-inline-end:22px;background:var(--brand);color:#06121a;transform:translateY(90px);opacity:0;transition:transform .4s var(--spring),opacity .4s}
+  .fab-pkg.show{transform:translateY(0);opacity:1}
+  @media(max-width:560px){.fab .lbl{display:none}.fab{padding:0 15px;min-height:50px}}
+
+  /* ===== referral pill (appears occasionally) ===== */
+  .refpill{position:fixed;bottom:88px;inset-inline-start:22px;z-index:119;max-width:250px;background:var(--surface);
+    border:1px solid rgba(56,189,248,.4);border-radius:16px;padding:16px 18px 16px;box-shadow:0 16px 44px rgba(0,0,0,.55);
+    transform:translateY(20px) scale(.96);opacity:0;pointer-events:none;transition:all .45s var(--spring)}
+  .refpill.show{transform:none;opacity:1;pointer-events:auto}
+  .refpill h4{font-size:15px;margin-bottom:6px;color:var(--ink)}
+  .refpill p{font-size:13px;color:var(--ink-2);margin-bottom:12px;line-height:1.5}
+  .refpill a{display:block;text-align:center;background:var(--brand);color:#06121a;font-weight:700;font-size:13.5px;padding:10px;border-radius:10px;text-decoration:none}
+  .refpill .r-close{position:absolute;top:7px;inset-inline-end:11px;background:none;border:0;color:var(--ink-muted);font-size:20px;cursor:pointer;line-height:1}
+
+  /* ===== synergy (recommended systems) ===== */
+  .syn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .syn{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;transition:transform .3s var(--spring),border-color .3s}
+  .syn:hover{transform:translateY(-4px);border-color:rgba(56,189,248,.45)}
+  .syn .syn-name{font-family:'Rubik';font-weight:800;font-size:18px;color:var(--brand);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .syn p{font-size:14.5px;color:var(--ink-2);margin-bottom:16px;line-height:1.6}
+  .syn a{color:var(--brand);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:5px}
+
+  /* ===== partner banner (above footer) ===== */
+  .partner{background:linear-gradient(90deg,rgba(56,189,248,.12),transparent);border-top:1px solid var(--border)}
+  .partner .wrap{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-block:28px;flex-wrap:wrap}
+  .partner strong{display:block;font-size:17px;color:var(--ink);font-family:'Rubik';margin-bottom:3px}
+  .partner span{font-size:14px;color:var(--ink-2)}
+  .partner-btn{display:inline-flex;align-items:center;gap:7px;min-height:46px;padding:0 22px;border-radius:12px;background:var(--brand);color:#06121a;font-weight:700;text-decoration:none;transition:background .2s,transform .2s;white-space:nowrap}
+  .partner-btn:hover{background:var(--brand-hover);transform:translateY(-1px)}
+
+  /* rocket lottie inside lead forms */
+  .rocket-lottie{position:relative;width:100%;max-width:340px;aspect-ratio:1/1;margin:0 auto;filter:hue-rotate(40deg) saturate(1.15)}
+  .rocket-lottie svg{display:block;width:100%!important;height:100%!important}
+  /* text placed INSIDE the lottie speech bubble (counter-rotate hue so it stays readable) */
+  .bubble-text{position:absolute;top:15%;left:60%;transform:translateX(-50%);width:46%;text-align:center;
+    display:flex;flex-direction:column;gap:2px;z-index:2;pointer-events:none;filter:hue-rotate(-40deg)}
+  .bubble-text span{font-size:11px;font-weight:800;color:#241546;line-height:1.2}
+  .ff-error{color:#ff7a7a;font-size:12.5px;margin:-8px 0 12px;display:none}
+  .ff-error.show{display:block}
+
+  /* ===== exit popup (every page, after 60s) ===== */
+  .xp-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .3s}
+  .xp-overlay.show{opacity:1;pointer-events:auto}
+  .xp-card{position:relative;background:var(--surface);border:1px solid var(--border-strong);border-radius:20px;max-width:440px;width:100%;padding:36px 30px;box-shadow:0 30px 90px rgba(0,0,0,.65);transform:translateY(24px) scale(.96);transition:transform .4s var(--spring)}
+  .xp-overlay.show .xp-card{transform:none}
+  .xp-close{position:absolute;top:12px;inset-inline-end:14px;background:none;border:0;color:var(--ink-muted);font-size:22px;cursor:pointer;line-height:1}
+  .xp-badge{display:inline-block;font-size:12px;font-weight:700;color:var(--brand);background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);padding:4px 12px;border-radius:999px;margin-bottom:14px}
+  .xp-card h3{font-size:22px;margin-bottom:8px;line-height:1.25}
+  .xp-sub{color:var(--ink-2);font-size:15px;margin-bottom:20px}
+  .xp-card select{width:100%;background:var(--bg);border:1px solid var(--border-strong);border-radius:12px;padding:15px 14px;color:var(--ink);font-family:inherit;font-size:15px;min-height:54px;margin-bottom:14px}
+  .xp-success{text-align:center;padding:26px 10px}
+  .xp-success .ic{font-size:44px;margin-bottom:12px;color:var(--brand)}
+
+  /* ===== interactive screens tabs ===== */
+  .tabs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:26px;border-bottom:1px solid var(--border);padding-bottom:0}
+  .tabs button{position:relative;border:0;background:none;color:var(--ink-2);font-family:inherit;font-weight:600;font-size:15.5px;
+    padding:12px 20px;cursor:pointer;min-height:44px;transition:color .25s}
+  .tabs button::after{content:"";position:absolute;inset-inline:12px;bottom:-1px;height:2px;background:var(--brand);
+    transform:scaleX(0);transition:transform .3s var(--spring)}
+  .tabs button:hover{color:var(--ink)}
+  .tabs button.active{color:var(--brand)}
+  .tabs button.active::after{transform:scaleX(1)}
+  .tab-view{position:relative;border:1px solid var(--border-strong);border-radius:20px;overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.5);transition:box-shadow .35s,transform .35s var(--spring)}
+  .tab-view:hover{box-shadow:0 34px 90px rgba(56,189,248,.28)}
+  .tab-view .chrome{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.25)}
+  .tab-view .chrome i{width:11px;height:11px;border-radius:50%;background:#3a3d3c}
+  .tab-view .chrome i:first-child{background:#ff5f57}.tab-view .chrome i:nth-child(2){background:#febc2e}.tab-view .chrome i:nth-child(3){background:#28c840}
+  .tab-view .chrome .u{margin-inline-start:14px;font-size:12.5px;color:var(--ink-muted)}
+  .tab-view .screen{position:relative;overflow:hidden}
+  .tab-view img{display:block;width:100%;height:auto;transition:opacity .3s ease,transform .6s var(--spring)}
+  .tab-view:hover img{transform:scale(1.03)}
+  .tab-view img.fade{opacity:0}
+  .tab-cap{text-align:center;margin-top:22px;font-size:16px;color:var(--ink-2);min-height:24px;transition:opacity .3s}
+
+  /* ===== testimonials ===== */
+  .revs{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .rev{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px;display:flex;flex-direction:column;
+    transition:transform .3s var(--spring),border-color .3s,box-shadow .3s}
+  .rev:hover{transform:translateY(-6px);border-color:rgba(56,189,248,.4);box-shadow:0 20px 50px rgba(56,189,248,.14)}
+  .rev .stat{font-family:'Rubik';font-weight:800;font-size:34px;color:var(--brand);line-height:1}
+  .rev .unit{font-size:13px;color:var(--ink-muted);margin:4px 0 16px}
+  .rev .quote{font-size:15.5px;color:var(--ink);line-height:1.75;flex:1;margin-bottom:20px}
+  .rev .who{display:flex;align-items:center;gap:11px}
+  .rev .av{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:800;color:var(--brand);
+    background:radial-gradient(circle at 30% 30%,rgba(56,189,248,.4),rgba(56,189,248,.12));border:1px solid rgba(56,189,248,.3)}
+  .rev .who b{font-size:14.5px;display:block}
+  .rev .who span{font-size:12.5px;color:var(--ink-muted)}
+
+  /* ===== stat band (count-up) ===== */
+  .band{border-block:1px solid var(--border);background:var(--soft)}
+  .band .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding-block:48px;text-align:center}
+  .band .n{font-family:'Rubik';font-weight:800;font-size:clamp(30px,4.4vw,44px);color:var(--brand)}
+  .band .l{font-size:14px;color:var(--ink-2);margin-top:6px}
+
+  /* section head */
+  .sec-head{text-align:center;max-width:660px;margin:0 auto 56px}
+  .sec-head .eyebrow{color:var(--brand);font-weight:700;font-size:14px;letter-spacing:.06em;margin-bottom:12px}
+  .sec-head h2{font-size:clamp(28px,4.4vw,46px);margin-bottom:14px}
+  .sec-head p{color:var(--ink-2);font-size:17px}
+
+  /* ===== features ===== */
+  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .feat{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;
+    transition:transform .3s var(--spring),border-color .3s,background .3s;overflow:hidden}
+  .feat:hover{transform:translateY(-6px);border-color:rgba(56,189,248,.45);background:var(--soft)}
+  .feat .ic{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;margin-bottom:18px;font-size:24px;
+    background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.25);transition:transform .3s var(--spring)}
+  .feat:hover .ic{transform:scale(1.1) rotate(-4deg)}
+  .feat h3{font-size:20px;margin-bottom:10px}
+  .feat p{color:var(--ink-2);font-size:15px;margin-bottom:18px}
+  .feat .more{color:var(--brand);font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;gap:6px}
+  .feat .more .arr{transition:transform .25s var(--spring)}
+  .feat:hover .more .arr{transform:translateX(-6px)}
+  .feat .badge{position:absolute;top:18px;inset-inline-start:18px;font-size:11px;font-weight:700;color:var(--neon);
+    background:rgba(125,211,252,.1);border:1px solid rgba(125,211,252,.28);padding:3px 9px;border-radius:999px}
+
+  /* ===== agent team orbit ===== */
+  .orbit-wrap{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+  .orbit{position:relative;width:min(440px,90vw);aspect-ratio:1;margin:0 auto}
+  .orbit .core{position:absolute;inset:38%;border-radius:50%;display:grid;place-items:center;font-size:30px;
+    background:radial-gradient(circle at 35% 30%,rgba(56,189,248,.45),rgba(56,189,248,.12));
+    border:1px solid rgba(56,189,248,.5);box-shadow:0 0 40px rgba(56,189,248,.35)}
+  .orbit .ring{position:absolute;inset:0;border:1px dashed var(--border-strong);border-radius:50%}
+  .orbit .ring.r2{inset:15%}
+  .spin{position:absolute;inset:0;animation:spin 26s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .node{position:absolute;top:50%;left:50%;width:78px;height:78px;margin:-39px;border-radius:50%;
+    background:var(--surface);border:1px solid rgba(56,189,248,.35);display:grid;place-items:center;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);animation:counter 26s linear infinite}
+  @keyframes counter{to{transform:rotate(-360deg)}}
+  .node .em{font-size:26px}
+  .node .tag{position:absolute;bottom:-22px;font-size:11px;color:var(--ink-2);white-space:nowrap;font-weight:600}
+  .n1{transform:translate(0,-190px)} .n2{transform:translate(190px,0)} .n3{transform:translate(0,190px)} .n4{transform:translate(-190px,0)}
+  .orbit-copy h2{font-size:clamp(26px,4vw,40px);margin-bottom:16px}
+  .orbit-copy p{color:var(--ink-2);font-size:17px;margin-bottom:16px}
+  .orbit-copy .role-list{display:flex;flex-direction:column;gap:10px}
+  .orbit-copy .role{display:flex;gap:10px;align-items:center;font-size:15px;color:var(--ink)}
+  .orbit-copy .role b{color:var(--brand)}
+  .orbit-copy .role .d{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+
+  /* ===== steps ===== */
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:s}
+  .step{position:relative;padding-top:14px}
+  .step::before{counter-increment:s;content:"0" counter(s);font-family:'Rubik';font-weight:800;font-size:46px;
+    color:transparent;-webkit-text-stroke:1.5px rgba(56,189,248,.55);display:block;margin-bottom:14px}
+  .step h3{font-size:18px;margin-bottom:8px}
+  .step p{color:var(--ink-2);font-size:14.5px}
+  .step:not(:last-child)::after{content:"";position:absolute;top:36px;inset-inline-start:-11px;width:22px;height:2px;background:var(--border-strong)}
+
+  /* ===== autonomy switch (interactive) ===== */
+  .auto{max-width:780px;margin:0 auto;text-align:center}
+  .switch{position:relative;display:inline-flex;background:var(--surface);border:1px solid var(--border-strong);
+    border-radius:999px;padding:5px;margin-bottom:30px;gap:2px}
+  .switch button{position:relative;z-index:1;border:0;background:none;color:var(--ink-2);font-family:inherit;font-weight:700;
+    font-size:15px;padding:11px 26px;border-radius:999px;cursor:pointer;transition:color .3s;min-height:44px}
+  .switch button.active{color:#06130D}
+  .switch .glide{position:absolute;z-index:0;top:5px;bottom:5px;border-radius:999px;background:var(--brand);
+    transition:all .4s var(--spring)}
+  .auto-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:34px;min-height:150px}
+  .auto-panel h3{font-size:22px;margin-bottom:10px;color:var(--brand)}
+  .auto-panel p{color:var(--ink-2);font-size:16px}
+  .auto-panel .st{display:inline-block;margin-top:14px;font-size:13px;color:var(--ink-muted)}
+
+  /* ===== pricing ===== */
+  .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+  .price{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px;
+    display:flex;flex-direction:column;transition:transform .3s var(--spring),border-color .3s}
+  .price:hover{transform:translateY(-5px);border-color:rgba(56,189,248,.4)}
+  .price.pop{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand),0 20px 50px rgba(56,189,248,.14)}
+  .price .tag{position:absolute;top:-12px;inset-inline-start:50%;transform:translateX(50%);background:var(--brand);color:#06130D;
+    font-size:12px;font-weight:700;padding:4px 14px;border-radius:999px}
+  .price h3{font-size:19px;margin-bottom:6px}
+  .price .amt{font-family:'Rubik';font-weight:800;font-size:40px;margin:8px 0 2px}
+  .price .amt small{font-size:15px;color:var(--ink-muted);font-weight:600}
+  .price .desc{color:var(--ink-muted);font-size:14px;margin-bottom:18px}
+  .price ul{list-style:none;margin-bottom:22px;display:flex;flex-direction:column;gap:10px;flex:1}
+  .price li{font-size:14.5px;color:var(--ink-2);display:flex;gap:9px;align-items:flex-start}
+  .price li::before{content:"✓";color:var(--brand);font-weight:800;flex:none}
+  .price .btn{width:100%}
+
+  /* ===== faq ===== */
+  .faq{max-width:760px;margin:0 auto}
+  .q{border:1px solid var(--border);border-radius:14px;background:var(--surface);margin-bottom:12px;overflow:hidden}
+  .q summary{list-style:none;cursor:pointer;padding:20px 22px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:16.5px;min-height:44px}
+  .q summary::-webkit-details-marker{display:none}
+  .q summary .plus{color:var(--brand);font-size:22px;transition:transform .3s var(--spring);flex:none;margin-inline-start:14px}
+  .q[open] summary .plus{transform:rotate(135deg)}
+  .q .a{padding:0 22px 20px;color:var(--ink-2);font-size:15px}
+
+  /* final */
+  .final{position:relative;text-align:center;background:linear-gradient(180deg,var(--soft),var(--bg))}
+  .final h2{font-size:clamp(30px,5vw,50px);margin-bottom:16px}
+  .final p{color:var(--ink-2);font-size:18px;margin-bottom:30px}
+
+  /* footer */
+  footer{border-top:1px solid var(--border);padding-block:48px 30px;color:var(--ink-muted);font-size:14px}
+  .foot-grid{display:flex;justify-content:space-between;flex-wrap:wrap;gap:28px;margin-bottom:32px}
+  .foot-grid h5{color:var(--ink);font-size:14px;margin-bottom:14px;font-weight:700}
+  .foot-grid a{display:block;color:var(--ink-muted);margin-bottom:9px;font-size:14px;transition:color .2s}
+  .foot-grid a:hover{color:var(--brand)}
+  .foot-bottom{border-top:1px solid var(--border);padding-top:22px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+  /* reveal + stagger */
+  .reveal{opacity:0;transform:translateY(28px);transition:opacity .7s var(--spring),transform .7s var(--spring);transition-delay:calc(var(--i,0)*90ms)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important}
+    .reveal,.mock{opacity:1!important;transform:none!important}
+    .spin,.node{animation:none!important}
+    .m-bars .b{transition:none}
+  }
+
+  header.mobile-open .nav-links{display:flex!important;position:absolute;top:68px;inset-inline:0;flex-direction:column;
+    align-items:flex-start;background:var(--bg);border-bottom:1px solid var(--border);padding:18px 24px;gap:18px;z-index:99}
+  @media(max-width:900px){
+    .nav-links,.nav-cta .btn-ghost,.lang{display:none}
+    .burger{display:block}
+    .features,.steps,.prices,.band .wrap,.revs,.syn-grid{grid-template-columns:1fr 1fr}
+    .mock-body{grid-template-columns:1fr}.mock-side{display:none}
+    .m-cards{grid-template-columns:1fr 1fr}
+    .orbit-wrap,.how-layout{grid-template-columns:1fr;gap:30px}
+    .how-lottie{max-width:280px}
+    .lead-card{grid-template-columns:1fr;gap:26px;padding:30px}
+    .lead-visual{order:-1;min-height:170px}
+  }
+  @media(max-width:560px){
+    .features,.steps,.prices,.band .wrap,.revs,.syn-grid{grid-template-columns:1fr}
+    .foot-grid{flex-direction:column}
+    .switch button{padding:11px 16px;font-size:13.5px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a href="#" class="logo" aria-label="HELIX SDR">HELIX <span style="color:var(--brand)">SDR</span><span class="dot"></span></a>
+      <div class="nav-links">
+        <a href="#features">יכולות</a>
+        <a href="#team">צוות הסוכנים</a>
+        <a href="#how">איך זה עובד</a>
+        <a href="#autonomy">שליטה</a>
+        <a href="#pricing">מחירים</a>
+      </div>
+      <div class="nav-cta">
+        <span class="lang">EN</span>
+        <a href="#pricing" class="btn btn-ghost">התחברות</a>
+        <a href="#pricing" class="btn btn-primary">התחלה חינם</a>
+        <button class="burger" aria-label="תפריט" aria-expanded="false">☰</button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<!-- 1 · HERO -->
+<section class="hero">
+  <div class="glow-bg"></div>
+  <div class="wrap">
+    <span class="pill"><span class="live"></span> הסוכנים עובדים עכשיו · 24/7</span>
+    <h1>
+      <span class="unfold"><span class="from">מרשימות קרות ו-5 כלים מודבקים ביד</span></span>
+      <span class="unfold"><span><span class="hl">לשיחות עם הלקוח הנכון</span></span></span>
+    </h1>
+    <p class="sub">זה לא נציג בודד, זה <b style="color:var(--ink)">צוות שלם של סוכני AI שעובד ביחד</b>: אחד חוקר ומעשיר כל ליד, השני כותב פנייה אישית, השלישי שולח ועוקב, <b style="color:var(--ink)">סוכן מגיב</b> שעונה ומכשיר לידים שמשיבים, ו<b style="color:var(--ink)">סוכן מאמת</b> שבודק כל נתון מול המקור ופוסל מה שלא מגובה, כדי שלא תצא עם עובדה שגויה. הכל רץ מסביב לשעון, ואת כל הצוות מנהלים ישר <b style="color:var(--ink)">מוואטסאפ</b>, בהודעה רגילה בעברית.</p>
+    <div class="hero-cta">
+      <a href="#pricing" class="btn btn-primary">התחלה חינם, בלי כרטיס אשראי</a>
+      <a href="#how" class="btn btn-ghost">איך זה עובד ↓</a>
+    </div>
+    <p class="micro">חודש ראשון ללא עלות · הקמה תוך 5 דקות · ביטול בכל רגע</p>
+
+    <div class="trust">
+      <p>מבוסס על מנועי ה-AI המובילים בעולם</p>
+      <div class="trust-logos"><span>Anthropic</span><span>OpenAI</span><span>Google</span><span>Meta</span><span>TikTok</span></div>
+    </div>
+
+    <div class="mock-stage">
+      <div class="mock" id="mock">
+        <div class="mock-bar"><i></i><i></i><i></i><span class="url">app.helix-sdr.co.il/performance</span></div>
+        <img class="mock-shot" src="shots/sdr-1.jpg" alt="דשבורד HELIX SDR, מסך ביצועים" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 1.4 · LEAD FORM (prominent, right under the reclined screen) -->
+<section class="lead lead-hero" style="padding-top:0">
+  <div class="wrap">
+    <div class="lead-card">
+      <div>
+        <p class="lead-eyebrow">התחילו עכשיו, חינם</p>
+        <h2>השאירו פרטים והצוות מתחיל לעבוד</h2>
+        <p class="lead-sub">שם ומספר, ונחזור אליך עוד היום עם הדגמה. או דברו איתנו ישר בוואטסאפ.</p>
+        <form class="lead-form">
+          <div class="ff"><input id="h-name" type="text" required placeholder=" " autocomplete="name"><label for="h-name">שם מלא</label></div>
+          <div class="ff"><input id="h-company" type="text" placeholder=" " autocomplete="organization"><label for="h-company">שם חברה</label></div>
+          <div class="ff"><input id="h-email" type="email" required placeholder=" " autocomplete="email"><label for="h-email">מייל עסקי</label></div>
+          <p class="ff-error">נדרש מייל עסקי. אפשר תמיד גם <a href="https://wa.me/972544468883" target="_blank" rel="noopener" style="color:var(--brand);font-weight:700">לשלוח הודעת וואטסאפ</a> במקום.</p>
+          <div class="ff"><input id="h-phone" type="tel" dir="ltr" required placeholder=" " autocomplete="tel"><label for="h-phone">טלפון</label></div>
+          <label class="lead-check"><input type="checkbox" required> אני מסכים/ה לקבל פנייה חוזרת מ-HELIX</label>
+          <div class="lead-actions">
+            <span class="cta-wrap">
+              <button class="lead-submit" type="submit">קבלו הדגמה חינם</button>
+              <svg class="demo-cursor" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M4 2l6 16 2.5-6.5L19 9z" stroke="#06121a" stroke-width="1.2"/></svg>
+            </span>
+            <a class="lead-wa" href="https://wa.me/972544468883" target="_blank" rel="noopener">💬 וואטסאפ</a>
+          </div>
+        </form>
+        <div class="lead-success" hidden><div class="ic">✅</div><h3>קיבלנו!</h3><p>נחזור אליך עוד היום.</p></div>
+      </div>
+      <div class="lead-visual"><div class="rocket-lottie"><div class="bubble-text"><span>הקמה 5 דק'</span><span>חודש ראשון חינם</span><span>בלי כרטיס אשראי</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 1.5 · OFFER BAR (above the fold) -->
+<div class="offerbar">
+  <div class="wrap">
+    <div class="ob-left">
+      <span class="ob-result">התוצאה: <b>×3 יותר פגישות</b> מכל רשימה, בלי מייל שנשמע קר</span>
+      <span class="ob-badge">חודש ראשון חינם</span>
+    </div>
+    <a class="ob-cta" href="https://wa.me/972544468883" target="_blank" rel="noopener">קבלו הדגמה חינם <span aria-hidden="true">←</span></a>
+  </div>
+</div>
+
+<!-- 2 · SOCIAL PROOF (count-up) -->
+<div class="band">
+  <div class="wrap">
+    <div class="reveal"><div class="n" data-count="3" data-suffix="×">0</div><div class="l">יותר פגישות מכל רשימה קרה</div></div>
+    <div class="reveal" style="--i:1"><div class="n" data-count="5" data-suffix="">0</div><div class="l">כלים מודבקים שהוחלפו במנוע אחד</div></div>
+    <div class="reveal" style="--i:2"><div class="n" data-count="100" data-suffix="%">0</div><div class="l">מהנתונים מאומתים מול המקור</div></div>
+    <div class="reveal" style="--i:3"><div class="n" data-count="0" data-suffix="">0</div><div class="l">קנסות: חסימת ציות מובנית לכל ערוץ</div></div>
+  </div>
+</div>
+
+<!-- 3 · FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">היכולות</div>
+      <h2>כל תהליך ה-outbound. סוכן אחד לכל תפקיד.</h2>
+      <p>כל יכולת היא סוכן עצמאי שעובד לבד, מתואם דרך צ'יף מרכזי, וסוכן ייעודי מאמת אותו כדי למנוע נתונים שגויים והזיות של AI.</p>
+    </div>
+    <div class="features">
+      <article class="feat reveal"><div class="ic">🔎</div><h3>מחקר והעשרת לידים</h3><p>מנוע Waterfall אוסף דאטה על כל ליד קודם ממקורות זולים, ורק אז פונה לספק חיצוני, ומשלמים רק על מה שבאמת נמצא.</p><a class="more">גלה עוד <span class="arr">←</span></a></article>
+      <article class="feat reveal" style="--i:1"><div class="ic">✉️</div><h3>פנייה אישית שלא נשמעת קרה</h3><p>בודק מה הליד פרסם ועשה ברשת, וכותב מייל שבאמת מרגיש אישי, לא ׳עוד מייל קר׳.</p><a class="more">גלה עוד <span class="arr">←</span></a></article>
+      <article class="feat reveal" style="--i:2"><div class="ic">🔀</div><h3>רצף רב-ערוצי</h3><p>מייל, לינקדאין ווואטסאפ בתזמור אחד, עם חסימת ציות מובנית לכל ערוץ, בלי קנסות וחסימות.</p><a class="more">גלה עוד <span class="arr">←</span></a></article>
+      <article class="feat reveal"><div class="ic">📡</div><h3>תפיסת איתותים</h3><p>תופס איתות קנייה (גיוס, מימון, טכנולוגיה חדשה) ופונה מיוזמתו ברגע הנכון.</p><a class="more">גלה עוד <span class="arr">←</span></a></article>
+      <article class="feat reveal" style="--i:1"><div class="ic">🛡️</div><h3>מאמת אדוורסרי</h3><p>בודק כל נתון מול קטע-המקור שצוטט, ופוסל מה שלא נתמך, כדי שלא תפנה עם ׳מזל טוב על הגיוס׳ שלא קרה.</p><a class="more">גלה עוד <span class="arr">←</span></a><span class="badge">רק ב-HELIX</span></article>
+      <article class="feat reveal" style="--i:2"><div class="ic">🔗</div><h3>מתג בטוח, ציות-first</h3><p>אתם בוחרים מה יוצא לבד ומה מחכה לאישור. בעברית מלאה, בנוי לרגולציה הישראלית.</p><a class="more">גלה עוד <span class="arr">←</span></a><span class="badge">רק ב-HELIX</span></article>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · AGENT TEAM (orbit) -->
+<section id="team" style="background:var(--soft);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="orbit-wrap">
+      <div class="orbit reveal">
+        <div class="ring"></div><div class="ring r2"></div>
+        <div class="spin">
+          <div class="node n1"><span class="em">🔎</span><span class="tag">חוקר</span></div>
+          <div class="node n2"><span class="em">✉️</span><span class="tag">כותב</span></div>
+          <div class="node n3"><span class="em">🛡️</span><span class="tag">מאמת</span></div>
+          <div class="node n4"><span class="em">📥</span><span class="tag">מגיב</span></div>
+        </div>
+        <div class="core">🎯<span class="tag" style="position:absolute;bottom:-24px;font-size:11px;color:var(--brand);font-weight:700">צ'יף</span></div>
+      </div>
+      <div class="orbit-copy reveal" style="--i:1">
+        <div class="eyebrow" style="color:var(--brand);font-weight:700;margin-bottom:12px">צוות הסוכנים</div>
+        <h2>לא מערכת. צוות.</h2>
+        <p>במרכז יושב ה<b style="color:var(--ink)">צ'יף</b>. סביבו סוכנים עצמאיים, כל אחד תפקיד ב-outbound, שעובדים במקביל ומתואמים דרכו, ואחד מהם תפקידו רק לאמת את השאר.</p>
+        <div class="role-list">
+          <div class="role"><span class="d"></span><b>צ'יף</b> (Chief) בונה אסטרטגיית פנייה ומתעדף לידים</div>
+          <div class="role"><span class="d"></span><b>חוקר + כותב</b> (Makers) מעשירים כל ליד וכותבים פנייה אישית</div>
+          <div class="role"><span class="d"></span><b>מגיב נכנס</b> (Responder) עונה ומכשיר לידים שמשיבים, קובע פגישה או מעביר חם למכירות</div>
+          <div class="role" style="color:var(--ink)"><span class="d" style="background:var(--neon)"></span><b style="color:var(--neon)">מאמת</b> (Critic) בודק כל נתון מול המקור, ופוסל מה שלא נתמך, כדי שלא תפנה עם עובדה שגויה</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · HOW IT WORKS -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">איך זה עובד</div><h2>מהחיבור הראשון לפגישה, 4 צעדים</h2><p>אתם מגדירים פעם אחת, והצוות עולה מדרגה בכל שלב.</p></div>
+    <div class="how-layout">
+      <div class="timeline2 reveal" id="timeline2">
+        <div class="tl-fill"></div>
+        <div class="tl-step"><div class="tl-dot"></div><div class="tl-num">שלב 01</div><h3>מחברים מקורות</h3><p>CRM, רשימות וכלי דאטה בחיבור מאובטח בקליק. בלי להדביק חמישה כלים ביד.</p></div>
+        <div class="tl-step"><div class="tl-dot"></div><div class="tl-num">שלב 02</div><h3>מגדירים קהל יעד</h3><p>ICP וקריטריוני ליד. הצוות לומד את ה-offer שלך ואת טון הפנייה.</p></div>
+        <div class="tl-step"><div class="tl-dot"></div><div class="tl-num">שלב 03</div><h3>הסוכנים חוקרים וכותבים</h3><p>החוקר מעשיר, הכותב מנסח פנייה אישית, והמאמת בודק כל נתון מול המקור.</p></div>
+        <div class="tl-step"><div class="tl-dot"></div><div class="tl-num">שלב 04</div><h3>שולחים ועוקבים</h3><p>רצף רב-ערוצי, מעקב, ותפיסת איתותים, עם מתג אישור לכל פעולה שיוצאת.</p></div>
+      </div>
+      <div class="how-lottie reveal" aria-hidden="true"><div id="stepsLottie"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5.5 · INTERACTIVE SCREENS -->
+<section id="screens">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">המערכת</div><h2>ככה זה נראה מבפנים</h2><p>לחצו על טאב, ותראו את המסך עצמו. לוח אחד לכל תהליך המכירה, מהליד ועד הפגישה, בעברית מלאה ו-RTL אמיתי.</p></div>
+    <div class="tabs reveal" role="tablist">
+      <button class="active" data-src="shots/sdr-1.jpg" data-cap="לוח לידים: כל ליד מועשר, מדורג ומוכן לפנייה, הכל במקום אחד.">לידים ורשימות</button>
+      <button data-src="shots/sdr-2.jpg" data-cap="מנוע Waterfall: העשרה ממקורות זולים קודם, ומאמת שבודק כל נתון מול המקור.">העשרה ומחקר</button>
+      <button data-src="shots/sdr-3.jpg" data-cap="פנייה אישית: המערכת חוקרת את הליד וכותבת מייל שמרגיש אישי, לא קר.">פנייה אישית</button>
+      <button data-src="shots/sdr-4.jpg" data-cap="רצף רב-ערוצי: מייל, לינקדאין ווואטסאפ בתזמור אחד, עם מעקב.">רצף ומעקב</button>
+      <button data-src="shots/sdr-5.jpg" data-cap="חסימת ציות מובנית לכל ערוץ, אתם בוחרים מה יוצא לבד ומה מחכה לאישור.">ציות ובקרה</button>
+    </div>
+    <div class="tab-view tilt reveal">
+      <div class="chrome"><i></i><i></i><i></i><span class="u">app.helix-sdr.co.il</span></div>
+      <div class="screen"><img id="tabimg" src="shots/sdr-1.jpg" alt="מסך HELIX SDR" /></div>
+    </div>
+    <p class="tab-cap reveal" id="tabcap">לוח לידים: כל ליד מועשר, מדורג ומוכן לפנייה, הכל במקום אחד.</p>
+  </div>
+</section>
+
+<!-- 6 · AUTONOMY SWITCH -->
+<section id="autonomy" style="background:var(--soft);border-block:1px solid var(--border)">
+  <div class="wrap auto">
+    <div class="sec-head reveal" style="margin-bottom:32px"><div class="eyebrow">השליטה שלך</div><h2>אתה מחליט כמה חבל לתת</h2><p>שלושה מצבים, מעבר בקליק. מערכות אחרות תמיד רצות לבד, אצלכם אתם בוחרים.</p></div>
+    <div class="switch reveal" role="tablist">
+      <span class="glide"></span>
+      <button class="active" data-i="0">יועץ</button>
+      <button data-i="1">אישור</button>
+      <button data-i="2">טייס אוטומטי</button>
+    </div>
+    <div class="auto-panel reveal" style="--i:1" id="autopanel">
+      <h3>מצב יועץ</h3>
+      <p>הסוכנים מנתחים וממליצים, ואתה מבצע. אפס פעולות אוטומטיות, שליטה מלאה.</p>
+      <span class="st">מומלץ בהתחלה, לבניית אמון</span>
+    </div>
+    <div class="wa-control reveal" style="--i:2;margin-top:28px;background:linear-gradient(90deg,color-mix(in srgb,var(--brand) 10%,transparent),transparent);border:1px solid color-mix(in srgb,var(--brand) 32%,transparent);border-radius:14px;padding:18px 22px;max-width:640px;margin-inline:auto;font-size:16px;color:var(--ink);line-height:1.7">
+      <b>💬 השוס:</b> את כל הצוות מנהלים ישר מ<b style="color:var(--brand)">וואטסאפ</b>, בלי להיכנס למערכת. כותבים לצ'יף הודעה רגילה בעברית, למשל <span style="color:var(--ink-2)">"תמצא לי 50 מנהלי מכירות בחברות SaaS ותשלח פנייה אישית"</span>, והוא מבצע ומחזיר סיכום.
+    </div>
+  </div>
+</section>
+
+<!-- 6.4 · LEAD FORM (soft) -->
+<section class="lead">
+  <div class="wrap">
+    <div class="lead-card soft">
+      <div>
+        <p class="lead-eyebrow">שיחת ייעוץ ראשונה</p>
+        <h2>שאלו אותנו כל שאלה</h2>
+        <p class="lead-sub">השאירו שם ומספר, ורון או ערן יחזרו אליך תוך יום עסקים. או דברו איתנו ישר בוואטסאפ.</p>
+        <form class="lead-form">
+          <div class="ff"><input id="s-name" type="text" required placeholder=" " autocomplete="name"><label for="s-name">שם מלא</label></div>
+          <div class="ff"><input id="s-company" type="text" placeholder=" " autocomplete="organization"><label for="s-company">שם חברה</label></div>
+          <div class="ff"><input id="s-email" type="email" required placeholder=" " autocomplete="email"><label for="s-email">מייל עסקי</label></div>
+          <p class="ff-error">נדרש מייל עסקי. אפשר תמיד גם <a href="https://wa.me/972544468883" target="_blank" rel="noopener" style="color:var(--brand);font-weight:700">לשלוח הודעת וואטסאפ</a> במקום.</p>
+          <div class="ff"><input id="s-phone" type="tel" dir="ltr" required placeholder=" " autocomplete="tel"><label for="s-phone">טלפון</label></div>
+          <label class="lead-check"><input type="checkbox" required> אני מסכים/ה לקבל פנייה חוזרת מ-HELIX</label>
+          <div class="lead-actions">
+            <button class="lead-submit" type="submit">שלחו פרטים</button>
+            <a class="lead-wa" href="https://wa.me/972544468883" target="_blank" rel="noopener">💬 וואטסאפ</a>
+          </div>
+        </form>
+        <div class="lead-success" hidden><div class="ic">✅</div><h3>קיבלנו!</h3><p>נחזור אליך בהקדם האפשרי.</p></div>
+      </div>
+      <div class="lead-visual"><div class="rocket-lottie"><div class="bubble-text"><span>חודש ראשון חינם</span><span>בלי התחייבות</span><span>עברית מלאה</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6.5 · TESTIMONIALS -->
+<section id="reviews">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">לקוחות</div><h2>צוותי מכירות שהפסיקו להדביק כלים</h2><p>מה שלקח שעות של מחקר ידני, פשוט קורה לבד.</p></div>
+    <div class="revs">
+      <div class="rev reveal">
+        <div class="stat">×3</div><div class="unit">יותר פגישות</div>
+        <p class="quote">"הפסקנו להדביק חמישה כלים ביד, הכל קורה במנוע אחד, והפנייה באמת אישית."</p>
+        <div class="who"><span class="av">א</span><div><b>אורי מ.</b><span>מנהל מכירות, חברת SaaS</span></div></div>
+      </div>
+      <div class="rev reveal" style="--i:1">
+        <div class="stat">0</div><div class="unit">קנסות ציות</div>
+        <p class="quote">"וואטסאפ קר בישראל היה סיוט של קנסות. עכשיו יש חסימת ציות מובנית ואני ישן בשקט."</p>
+        <div class="who"><span class="av">ד</span><div><b>דנה כ.</b><span>VP Sales</span></div></div>
+      </div>
+      <div class="rev reveal" style="--i:2">
+        <div class="stat">38%</div><div class="unit">שיעור מענה</div>
+        <p class="quote">"המיילים כבר לא נשמעים קרים, כי הם באמת אישיים, והמאמת מוודא שלא טעיתי בעובדה."</p>
+        <div class="who"><span class="av">י</span><div><b>יואב ש.</b><span>SDR Lead</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · PRICING (interactive 3D carousel, ported from PricingCarousel) -->
+<style>
+  .pc-layout{display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:start;max-width:1000px;margin:0 auto}
+  .pc-side-desktop{position:sticky;top:100px;display:flex;flex-direction:column;gap:3px}
+  .pc-side-mobile{display:none}
+  .pc-side-item{text-align:right;padding:11px 14px;border:none;border-inline-end:2px solid transparent;background:transparent;color:var(--ink-muted);font-size:15px;font-weight:600;cursor:pointer;border-radius:8px 0 0 8px;transition:all .2s;font-family:inherit}
+  .pc-side-item:hover{background:color-mix(in srgb,var(--brand) 6%,transparent);color:var(--ink)}
+  .pc-side-item.active{background:color-mix(in srgb,var(--brand) 10%,transparent);color:var(--brand);border-inline-end-color:var(--brand);font-weight:700}
+  .pc-side-tag{display:block;font-size:11px;color:var(--ink-muted);margin-top:1px;font-weight:400;direction:ltr;text-align:right}
+  .pc-side-item.active .pc-side-tag{color:var(--brand);opacity:.7}
+  .pc-carousel-area{position:relative}
+  .pc-wrap{perspective:1200px;position:relative;height:580px;overflow:visible;cursor:pointer}
+  .pc-card{position:absolute;top:0;left:50%;width:340px;margin-left:-170px;border:1px solid color-mix(in srgb,var(--brand) 15%,transparent);
+    border-radius:16px;padding:26px 22px;background:var(--surface);transition:all .6s cubic-bezier(.25,.8,.25,1);backface-visibility:hidden}
+  .pc-card.center{transform:translateX(0) translateZ(0) rotateY(0) scale(1);z-index:30;opacity:1;border-color:color-mix(in srgb,var(--brand) 42%,transparent);box-shadow:0 0 50px color-mix(in srgb,var(--brand) 16%,transparent);cursor:default}
+  .pc-card.right{transform:translateX(66%) translateZ(-150px) rotateY(-18deg) scale(.8);z-index:20;opacity:.8;filter:blur(.5px) brightness(.9);cursor:pointer}
+  .pc-card.left{transform:translateX(-66%) translateZ(-150px) rotateY(18deg) scale(.8);z-index:20;opacity:.8;filter:blur(.5px) brightness(.9);cursor:pointer}
+  .pc-card.far-right{transform:translateX(116%) translateZ(-300px) rotateY(-28deg) scale(.62);z-index:10;opacity:.4;filter:blur(2px) brightness(.82);cursor:pointer}
+  .pc-card.far-left{transform:translateX(-116%) translateZ(-300px) rotateY(28deg) scale(.62);z-index:10;opacity:.4;filter:blur(2px) brightness(.82);cursor:pointer}
+  .pc-card.hidden-card{transform:translateX(0) translateZ(-500px) scale(.4);z-index:1;opacity:0;pointer-events:none}
+  .pc-nav{display:flex;justify-content:center;gap:16px;margin-top:30px}
+  .pc-btn{width:44px;height:44px;border-radius:50%;border:1px solid color-mix(in srgb,var(--brand) 30%,transparent);background:color-mix(in srgb,var(--brand) 5%,transparent);color:var(--brand);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+  .pc-btn:hover{background:color-mix(in srgb,var(--brand) 15%,transparent);border-color:var(--brand)}
+  .pc-dots{display:flex;justify-content:center;gap:8px;margin-top:16px}
+  .pc-dot{width:8px;height:8px;border-radius:50%;background:color-mix(in srgb,var(--brand) 22%,transparent);border:none;cursor:pointer;transition:all .3s;padding:0}
+  .pc-dot.active{background:var(--brand);width:24px;border-radius:4px}
+  .pc-popular{position:absolute;top:-12px;inset-inline-end:20px;background:var(--brand);color:#06121a;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px}
+  .pc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:10px}
+  .pc-name{font-size:1.15rem;font-weight:700;color:var(--ink);font-family:'Rubik'}
+  .pc-price{font-size:1.6rem;font-weight:800;color:var(--brand);text-align:left;line-height:1.1;direction:ltr;font-family:'Rubik'}
+  .pc-price small{font-size:.9rem;font-weight:700}
+  .pc-price-note{font-size:.68rem;color:var(--ink-muted);text-align:left}
+  .pc-desc{font-size:.84rem;color:var(--ink-2);line-height:1.6;margin-bottom:14px}
+  .pc-target{font-size:.75rem;color:var(--ink-muted);font-style:italic;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+  .pc-items{list-style:none;margin-bottom:14px;padding:0}
+  .pc-items li{display:flex;align-items:flex-start;gap:8px;font-size:.84rem;color:var(--ink-2);padding:4px 0}
+  .pc-check{color:var(--brand);flex-shrink:0;font-weight:700}
+  .pc-benefits{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+  .pc-benefit{font-size:.68rem;color:color-mix(in srgb,var(--brand) 75%,white);background:color-mix(in srgb,var(--brand) 10%,transparent);padding:3px 8px;border-radius:12px}
+  .pc-cta{display:block;width:100%;padding:12px;background:var(--brand);color:#06121a;font-weight:700;font-size:.9rem;border:none;border-radius:10px;cursor:pointer;text-align:center;font-family:inherit}
+  .pc-cta:hover{background:var(--brand-hover)}
+  .pc-footnote{font-size:.72rem;color:var(--brand);font-style:italic;margin-top:10px;opacity:.85}
+  @media(max-width:900px){
+    .pc-layout{grid-template-columns:1fr;gap:0}
+    .pc-side-desktop{display:none}
+    .pc-side-mobile{display:flex;gap:8px;overflow-x:auto;padding-bottom:12px;margin-bottom:8px;scrollbar-width:none}
+    .pc-side-mobile::-webkit-scrollbar{display:none}
+    .pc-tab{flex-shrink:0;padding:9px 15px;border-radius:999px;border:1px solid color-mix(in srgb,var(--brand) 20%,transparent);background:transparent;color:var(--ink-muted);font-size:.82rem;cursor:pointer;white-space:nowrap;font-family:inherit}
+    .pc-tab.active{background:color-mix(in srgb,var(--brand) 10%,transparent);color:var(--brand);border-color:var(--brand);font-weight:700}
+  }
+  @media(max-width:768px){
+    .pc-layout{display:block}
+    .pc-side-mobile,.pc-side-desktop{display:none}
+    .pc-wrap{perspective:none;height:auto!important;overflow:visible;display:flex;flex-direction:column;gap:16px;cursor:default}
+    .pc-card{position:relative!important;top:auto;left:auto;width:100%;max-width:420px;margin:0 auto;padding:24px 20px;
+      transform:none!important;opacity:1!important;filter:none!important;box-shadow:none!important;
+      border-color:color-mix(in srgb,var(--brand) 18%,transparent)!important;cursor:default}
+    .pc-card.is-popular{border-color:color-mix(in srgb,var(--brand) 45%,transparent)!important;box-shadow:0 0 34px color-mix(in srgb,var(--brand) 12%,transparent)!important}
+    .pc-nav,.pc-dots{display:none}
+  }
+</style>
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">מחירים</div><h2>מחיר אחד ברור. שלושה מסלולים.</h2><p>תמחור שקוף, בלי "השאירו פרטים". חודש ראשון חינם על כל מסלול.</p></div>
+    <div class="prices">
+      <div class="price reveal">
+        <h3>Starter</h3><div class="amt">₪299<small>/חודש</small></div><div class="desc">לעצמאי או צוות מתחיל</div>
+        <div class="seats">👤 משתמש 1</div>
+        <ul><li>500 לידים מועשרים בחודש</li><li>פנייה רב-ערוצית</li><li>מאמת אדוורסרי</li><li>תמיכה במייל</li></ul>
+        <button class="btn btn-ghost buy">התחלה חינם</button>
+      </div>
+      <div class="price pop reveal" style="--i:1">
+        <span class="tag">הכי פופולרי</span>
+        <h3>Pro</h3><div class="amt">₪699<small>/חודש</small></div><div class="desc">לצוות מכירות שרוצה לצמוח</div>
+        <div class="seats">👥 עד 5 משתמשים</div>
+        <ul><li>5,000 לידים בחודש</li><li>תפיסת איתותים</li><li>רצפי מעקב אוטומטיים</li><li>חסימת ציות לכל ערוץ</li><li>תמיכה מהירה</li></ul>
+        <button class="btn btn-primary buy">התחלה חינם</button>
+      </div>
+      <div class="price reveal" style="--i:2">
+        <h3>Business</h3><div class="amt">₪1,490<small>/חודש</small></div><div class="desc">לארגונים וסוכנויות</div>
+        <div class="seats">👥 משתמשים ללא הגבלה</div>
+        <ul><li>25,000 לידים בחודש</li><li>גישת API + SSO</li><li>ספקי דאטה משלך (BYO key)</li><li>מיתוג לבן (white-label)</li><li>אונבורדינג אישי</li></ul>
+        <button class="btn btn-ghost buy">התחלה חינם</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7.5 · PRODUCT BUNDLES (interactive 3D carousel) -->
+<section id="bundles" style="background:var(--soft);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">חבילות מוצרים</div><h2>כמה צוותי סוכנים, שעובדים יחד</h2><p>כל מוצר HELIX הוא צוות סוכנים בפני עצמו. בחבילה, הצוותים מדברים זה עם זה, לוח אחד, מחיר אחד, בהנחה.</p></div>
+    <div class="pc-layout reveal">
+      <nav class="pc-side-desktop" id="pcSide"></nav>
+      <div class="pc-side-mobile" id="pcTabs"></div>
+      <div class="pc-carousel-area">
+        <div class="pc-wrap" id="pcWrap"></div>
+        <div class="pc-nav"><button class="pc-btn" id="pcPrev" aria-label="הקודם">›</button><button class="pc-btn" id="pcNext" aria-label="הבא">‹</button></div>
+        <div class="pc-dots" id="pcDots"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7.55 · SYNERGY (recommended systems to connect) -->
+<section id="synergy">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">משתלב מצוין עם</div><h2>מומלץ לחבר יחד עם HELIX SDR</h2><p>כל מוצר הוא צוות סוכנים. כשמחברים אותם, הצוותים עובדים יחד, והדאטה זורמת ביניהם אוטומטית.</p></div>
+    <div class="syn-grid">
+      <div class="syn reveal"><div class="syn-name">💬 HELIX OPS</div><p>OPS מחמם את הקהל בסושיאל, ו-SDR סוגר את הפנייה. הלידים החמים עוברים אוטומטית.</p><a href="#">גלו עוד ←</a></div>
+      <div class="syn reveal" style="--i:1"><div class="syn-name">🎙️ HELIX Meeting</div><p>כל פגישה ש-SDR קובע מוקלטת ומסוכמת לבד, והתובנות זורמות חזרה למכירות.</p><a href="#">גלו עוד ←</a></div>
+      <div class="syn reveal" style="--i:2"><div class="syn-name">✍️ HELIX Forms</div><p>סוגרים ליד, ומחתימים על החוזה באותו רגע, מהפנייה ישר למסמך חתום.</p><a href="#">גלו עוד ←</a></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7.6 · WHATSAPP COST NOTE (after bundles) -->
+<section style="padding-block:clamp(48px,7vw,80px)">
+  <div class="wrap" style="max-width:1120px">
+    <div style="border:1px solid rgba(37,211,102,.25);border-radius:20px;padding:clamp(28px,5vw,44px);background:linear-gradient(160deg,rgba(37,211,102,.06),rgba(0,0,0,.2))">
+      <div style="margin-bottom:16px"><span style="font-size:.72rem;font-weight:700;color:#25D366;border:1px solid rgba(37,211,102,.4);border-radius:999px;padding:4px 12px">💬 WhatsApp Business API הרשמי</span></div>
+      <h3 style="font-size:clamp(1.4rem,3.5vw,2rem);font-weight:800;color:var(--ink);margin-bottom:14px;font-family:'Rubik'">עלויות וואטסאפ, שקופות לחלוטין</h3>
+      <p style="color:var(--ink-2);line-height:1.8;font-size:.95rem">המערכת שולחת הודעות דרך <b style="color:var(--ink)">ה-API הרשמי של וואטסאפ (Meta Cloud API)</b>, לא דרך כלים אפורים. שליחה בשיטות לא-רשמיות מובילה ל<b style="color:var(--ink)">חסימת מספרי הטלפון שלך</b>, ואנחנו לא מוכנים לסכן את העסק שלך.</p>
+      <p style="color:var(--ink-2);line-height:1.8;font-size:.95rem;margin-top:12px">בתמורה, <b style="color:var(--ink)">מטא מחייבת על כל הודעה שהבוט שולח</b>. התעריפים נקבעים על ידי מטא ואינם בשליטתנו, לכן עלות ההודעות נפרדת מהמנוי, ואתם בוחרים איך לשלם:</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px" class="wcn-cols">
+        <div style="border:1px solid var(--border);border-radius:14px;padding:22px;background:rgba(0,0,0,.2)">
+          <h4 style="font-size:1.02rem;color:var(--ink);margin-bottom:6px;font-weight:700">לפי שימוש (Pay-as-you-go)</h4>
+          <p style="font-size:.84rem;color:var(--ink-muted);line-height:1.6;margin-bottom:12px">טוענים קרדיט מראש ומשלמים רק על מה ששלחתם. מתאים לנפח נמוך או משתנה.</p>
+          <table style="width:100%;border-collapse:collapse">
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0">מחיר להודעה</td><td style="font-size:.84rem;text-align:left;color:#25D366;font-weight:700">₪0.20</td></tr>
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0;border-top:1px solid var(--border)">טעינה מינימלית</td><td style="text-align:left;color:#25D366;font-weight:700;border-top:1px solid var(--border)">₪50</td></tr>
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0;border-top:1px solid var(--border)">הבוט מושהה כשנגמר</td><td style="text-align:left;color:#25D366;font-weight:700;border-top:1px solid var(--border)">✓</td></tr>
+          </table>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:14px;padding:22px;background:rgba(0,0,0,.2)">
+          <h4 style="font-size:1.02rem;color:var(--ink);margin-bottom:6px;font-weight:700">חבילה חודשית</h4>
+          <p style="font-size:.84rem;color:var(--ink-muted);line-height:1.6;margin-bottom:12px">מכסת הודעות קבועה במחיר נמוך יותר להודעה. מתאים לנפח גבוה וקבוע.</p>
+          <table style="width:100%;border-collapse:collapse">
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0">1,000 הודעות</td><td style="text-align:left;color:#25D366;font-weight:700">₪149</td></tr>
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0;border-top:1px solid var(--border)">5,000 הודעות</td><td style="text-align:left;color:#25D366;font-weight:700;border-top:1px solid var(--border)">₪590</td></tr>
+            <tr><td style="font-size:.84rem;color:var(--ink-2);padding:6px 0;border-top:1px solid var(--border)">25,000 הודעות</td><td style="text-align:left;color:#25D366;font-weight:700;border-top:1px solid var(--border)">₪2,400</td></tr>
+          </table>
+        </div>
+      </div>
+      <p style="font-size:.78rem;color:var(--ink-muted);margin-top:18px;line-height:1.6">✓ כל מסלול כולל מכסת הודעות חינם (100 / 500 / 2,000). התשלום מתחיל רק מעליה.<br>ℹ️ עדכון מטא: החל מ-1 באוקטובר 2026 גם תגובות הבוט בחלון 24 השעות יחויבו על ידי מטא, נעדכן את המכסות בהתאם.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7.7 · LEAD FORM (strong) -->
+<section class="lead">
+  <div class="wrap">
+    <div class="lead-card">
+      <div class="lead-visual"><div class="rocket-lottie"><div class="bubble-text"><span>הקמה 5 דק'</span><span>ביטול בכל רגע</span><span>ליווי אישי</span></div></div></div>
+      <div>
+        <p class="lead-eyebrow">דברו איתנו</p>
+        <h2>מוכנים לתת לצוות הסוכנים לעבוד?</h2>
+        <p class="lead-sub">שם ומספר, ונחזור אליך. או קפצו ישר לשיחת וואטסאפ.</p>
+        <form class="lead-form">
+          <div class="ff"><input id="c-name" type="text" required placeholder=" " autocomplete="name"><label for="c-name">שם מלא</label></div>
+          <div class="ff"><input id="c-company" type="text" placeholder=" " autocomplete="organization"><label for="c-company">שם חברה</label></div>
+          <div class="ff"><input id="c-email" type="email" required placeholder=" " autocomplete="email"><label for="c-email">מייל עסקי</label></div>
+          <p class="ff-error">נדרש מייל עסקי. אפשר תמיד גם <a href="https://wa.me/972544468883" target="_blank" rel="noopener" style="color:var(--brand);font-weight:700">לשלוח הודעת וואטסאפ</a> במקום.</p>
+          <div class="ff"><input id="c-phone" type="tel" dir="ltr" required placeholder=" " autocomplete="tel"><label for="c-phone">טלפון</label></div>
+          <label class="lead-check"><input type="checkbox" required> אני מסכים/ה לקבל פנייה חוזרת מ-HELIX</label>
+          <div class="lead-actions">
+            <button class="lead-submit" type="submit">שלחו פרטים</button>
+            <a class="lead-wa" href="https://wa.me/972544468883" target="_blank" rel="noopener">💬 וואטסאפ</a>
+          </div>
+        </form>
+        <div class="lead-success" hidden><div class="ic">✅</div><h3>קיבלנו!</h3><p>נחזור אליך בהקדם האפשרי.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 · FAQ -->
+<section style="background:var(--soft);border-block:1px solid var(--border)">
+  <div class="wrap">
+    <div class="sec-head reveal"><div class="eyebrow">שאלות נפוצות</div><h2>מה שרציתם לשאול</h2></div>
+    <div class="faq">
+      <details class="q reveal"><summary>צריך ידע טכני להתחיל?<span class="plus">+</span></summary><div class="a">לא. מחברים מקורות (CRM/רשימות), מגדירים קהל יעד בכמה שדות, והצוות עושה את השאר. תמיד אפשר מצב אישור ידני.</div></details>
+      <details class="q reveal"><summary>וואטסאפ ולינקדאין קרים לא מסוכנים בישראל?<span class="plus">+</span></summary><div class="a">בדיוק בגלל זה יש חסימת ציות מובנית לכל ערוץ. המערכת בנויה לרגולציה הישראלית, כדי שלא תיחסמו ולא תיקנסו.</div></details>
+      <details class="q reveal"><summary>איך אתם מוודאים שהנתונים נכונים?<span class="plus">+</span></summary><div class="a">מאמת אדוורסרי בודק כל נתון מול קטע-המקור שצוטט, ופוסל מה שלא נתמך, כדי שלא תפנה עם ׳מזל טוב על הגיוס׳ שמעולם לא קרה.</div></details>
+      <details class="q reveal"><summary>אני שולט מה יוצא ללקוחות?<span class="plus">+</span></summary><div class="a">כן. מתג בטוח בשלושה מצבים: יועץ, אישור, וטייס אוטומטי, עם מגבלות שאתם קובעים לכל פעולה.</div></details>
+      <details class="q reveal"><summary>מתחבר ל-CRM שלי?<span class="plus">+</span></summary><div class="a">כן, וגם ל-n8n ו-webhooks. כל ליד ופעילות זורמים חזרה ל-CRM שלך אוטומטית.</div></details>
+      <details class="q reveal"><summary>כמה זה עולה?<span class="plus">+</span></summary><div class="a">שלושה מסלולים שקופים: 299, 699 ו-1,490 ₪ לחודש. ההבדל הוא כמות הלידים והמשתמשים. חודש ראשון חינם.</div></details>
+      <details class="q reveal"><summary>אפשר לבטל בכל רגע?<span class="plus">+</span></summary><div class="a">כן, בלי חוזה והתחייבות. חודש ראשון חינם, ואם לא מתאים, עוזבים.</div></details>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · FINAL CTA -->
+<section class="final">
+  <div class="glow-bg"></div>
+  <div class="wrap" style="position:relative;z-index:1">
+    <h2 class="reveal">תנו לצוות הסוכנים למלא לכם את היומן.</h2>
+    <p class="reveal" style="--i:1">חודש ראשון חינם. בלי כרטיס אשראי. הקמה תוך 5 דקות.</p>
+    <div class="hero-cta reveal" style="--i:2;opacity:1;animation:none">
+      <a href="#pricing" class="btn btn-primary" style="min-height:54px;padding:0 34px;font-size:17px">התחלה חינם</a>
+      <a href="https://wa.me/972544468883" target="_blank" rel="noopener" class="btn btn-ghost" style="min-height:54px;padding:0 30px;font-size:17px">דברו איתנו בוואטסאפ</a>
+    </div>
+  </div>
+</section>
+
+<!-- PARTNER PROGRAM BANNER (above footer, every page) -->
+<div class="partner">
+  <div class="wrap">
+    <div>
+      <strong>מכירים עסקים שצריכים אותנו?</strong>
+      <span>הצטרפו לתכנית השותפים של HELIX והרוויחו אחוז חוזר כל חודש על כל לקוח שתביאו.</span>
+    </div>
+    <a href="#" class="partner-btn">לתכנית השותפים ←</a>
+  </div>
+</div>
+
+<!-- FIXED SIDE BUTTONS -->
+<a class="fab fab-wa" href="https://wa.me/972544468883" target="_blank" rel="noopener" aria-label="וואטסאפ">💬 <span class="lbl">וואטסאפ</span></a>
+<button class="fab fab-pkg" id="fabPkg" aria-label="לחבילות">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+  <span class="lbl">לחבילות</span>
+</button>
+
+<!-- REFERRAL PILL (appears occasionally) -->
+<div class="refpill" id="refPill">
+  <button class="r-close" id="refClose" aria-label="סגירה">×</button>
+  <h4>❤️ אוהבים את HELIX?</h4>
+  <p>ממליצים עלינו לחבר וקבלו הנחה על המנוי הבא.</p>
+  <a href="#">שתפו וקבלו הנחה ←</a>
+</div>
+
+<!-- EXIT/TIMED POPUP (every page, after 60s) -->
+<div class="xp-overlay" id="xpOverlay">
+  <div class="xp-card">
+    <button class="xp-close" id="xpClose" aria-label="סגירה">✕</button>
+    <span class="xp-badge">ייעוץ חינם</span>
+    <div id="xpForm">
+      <h3>רגע לפני שאתם הולכים, קבלו ייעוץ חינם</h3>
+      <p class="xp-sub">השאירו פרטים ונחזור אליך תוך 30 דקות בימי עסקים.</p>
+      <form id="xpLead" class="lead-form">
+        <div class="ff"><input id="xp-name" type="text" required placeholder=" " autocomplete="name"><label for="xp-name">שם מלא</label></div>
+        <div class="ff"><input id="xp-email" type="email" required placeholder=" " autocomplete="email"><label for="xp-email">מייל עסקי</label></div>
+        <p class="ff-error">נדרש מייל עסקי. אפשר תמיד גם <a href="https://wa.me/972544468883" target="_blank" rel="noopener" style="color:var(--brand);font-weight:700">לשלוח הודעת וואטסאפ</a> במקום.</p>
+        <div class="ff"><input id="xp-phone" type="tel" dir="ltr" required placeholder=" " autocomplete="tel"><label for="xp-phone">טלפון</label></div>
+        <select id="xp-interest">
+          <option value="">מה מעניין אותך? (אופציונלי)</option>
+          <option>ניהול שיווק אוטומטי</option>
+          <option>קמפיינים ממומנים</option>
+          <option>בוט וואטסאפ ולידים</option>
+          <option>חבילת מוצרים</option>
+        </select>
+        <label class="lead-check"><input type="checkbox" required> אני מסכים/ה למדיניות הפרטיות ותנאי השימוש</label>
+        <button type="submit" class="lead-submit" style="width:100%">שלח עכשיו ←</button>
+      </form>
+    </div>
+    <div class="xp-success" id="xpSuccess" hidden><div class="ic">✓</div><h3>תודה!</h3><p style="color:var(--ink-2)">נחזור אליך תוך 30 דקות בימי עסקים.</p></div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div style="max-width:260px">
+        <div class="logo" style="margin-bottom:12px">HELIX <span style="color:var(--brand)">SDR</span><span class="dot"></span></div>
+        <p style="font-size:13.5px">צוות סוכני AI שממלא לכם את צנרת המכירות. חלק מאקוסיסטם HELIX.</p>
+      </div>
+      <div><h5>מוצר</h5><a href="#features">יכולות</a><a href="#how">איך זה עובד</a><a href="#pricing">מחירים</a><a href="#team">צוות הסוכנים</a></div>
+      <div><h5>אקוסיסטם</h5><a href="#">HELIX Rank</a><a href="#">HELIX CRM</a><a href="#">HELIX Dashboards</a><a href="#">כל המוצרים</a></div>
+      <div><h5>קשר</h5><a href="#">וואטסאפ</a><a href="#">info@helix.co.il</a><a href="#">לינקדאין</a><a href="#">אינסטגרם</a></div>
+    </div>
+    <div class="foot-bottom"><span>© 2026 HELIX SDR · כל הזכויות שמורות</span><span>תנאי שימוש · מדיניות פרטיות</span></div>
+  </div>
+</footer>
+
+<script>
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // mobile burger menu
+  const header=document.querySelector('header'), burger=document.querySelector('.burger');
+  burger.addEventListener('click',()=>{const open=header.classList.toggle('mobile-open');burger.setAttribute('aria-expanded',open)});
+  document.querySelectorAll('.nav-links a').forEach(a=>a.addEventListener('click',()=>{header.classList.remove('mobile-open');burger.setAttribute('aria-expanded','false')}));
+
+  // scroll reveal
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  // dashboard: mock lift + bars grow
+  const mock=document.getElementById('mock');
+  new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){
+    mock.classList.add('in');
+    document.querySelectorAll('#mbars .b').forEach((b,i)=>setTimeout(()=>b.style.height=b.dataset.h+'%', reduce?0:120+i*60));
+    o.disconnect();
+  }})},{threshold:.3}).observe(mock);
+
+  // count-up
+  function countUp(el){
+    const target=parseFloat(el.dataset.count), dec=parseInt(el.dataset.dec||'0'), suf=el.dataset.suffix||'';
+    if(reduce){el.textContent=target.toFixed(dec)+suf;return}
+    const dur=1200, t0=performance.now();
+    function tick(t){const p=Math.min((t-t0)/dur,1); const e=1-Math.pow(1-p,3);
+      el.textContent=(target*e).toFixed(dec)+suf; if(p<1)requestAnimationFrame(tick);}
+    requestAnimationFrame(tick);
+  }
+  document.querySelectorAll('[data-count]').forEach(el=>{
+    new IntersectionObserver((es,o)=>{es.forEach(e=>{if(e.isIntersecting){countUp(el);o.disconnect()}})},{threshold:.6}).observe(el);
+  });
+
+  // autonomy switch
+  const modes=[
+    {t:'מצב יועץ',d:'הסוכנים מנתחים וממליצים, ואתה מבצע. אפס פעולות אוטומטיות, שליטה מלאה.',s:'מומלץ בהתחלה, לבניית אמון'},
+    {t:'מצב אישור',d:'הסוכנים מכינים הכל ומחכים לאישור שלך לפני כל פרסום או שינוי תקציב.',s:'האיזון בין שליטה למהירות'},
+    {t:'טייס אוטומטי',d:'הסוכנים פועלים לבד תחת מגבלות שאתה קובע: תקרת תקציב, ערוצים, וסוגי פעולות.',s:'למי שכבר סומך על הצוות'}
+  ];
+  const sw=document.querySelector('.switch'), glide=sw.querySelector('.glide'),
+        btns=[...sw.querySelectorAll('button')], panel=document.getElementById('autopanel');
+  function moveGlide(btn){glide.style.width=btn.offsetWidth+'px';glide.style.right=(btn.offsetParent.offsetWidth-btn.offsetLeft-btn.offsetWidth)+'px'}
+  function setMode(i){btns.forEach(b=>b.classList.remove('active'));btns[i].classList.add('active');moveGlide(btns[i]);
+    const m=modes[i];panel.innerHTML=`<h3>${m.t}</h3><p>${m.d}</p><span class="st">${m.s}</span>`}
+  btns.forEach(b=>b.addEventListener('click',()=>setMode(parseInt(b.dataset.i))));
+  window.addEventListener('load',()=>moveGlide(btns[0]));
+  setTimeout(()=>moveGlide(btns[0]),300);
+
+  // confetti on pricing select (brand colors, matches lib/confetti.ts)
+  document.querySelectorAll('.buy').forEach(btn=>btn.addEventListener('click',(e)=>{
+    e.preventDefault();
+    if(typeof confetti==='function' && !reduce){
+      const r=btn.getBoundingClientRect();
+      confetti({particleCount:90,spread:75,
+        origin:{x:(r.left+r.width/2)/window.innerWidth,y:(r.top+r.height/2)/window.innerHeight},
+        colors:['#38BDF8','#7DD3FC','#0EA5E9','#E6EDF3'],disableForReducedMotion:true});
+    }
+  }));
+
+  // interactive screen tabs (click a tab -> show that screen)
+  const tabBtns=[...document.querySelectorAll('.tabs button')], tabImg=document.getElementById('tabimg'), tabCap=document.getElementById('tabcap');
+  tabBtns.forEach(btn=>btn.addEventListener('click',()=>{
+    if(btn.classList.contains('active'))return;
+    tabBtns.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+    const src=btn.dataset.src, cap=btn.dataset.cap;
+    tabImg.classList.add('fade'); tabCap.style.opacity='0';
+    setTimeout(()=>{
+      const pre=new Image(); pre.onload=()=>{tabImg.src=src; tabImg.classList.remove('fade')}; pre.src=src;
+      tabCap.textContent=cap; tabCap.style.opacity='1';
+    }, reduce?0:180);
+  }));
+
+  // 3D tilt on system images (matches original product-page feel)
+  if(!reduce){document.querySelectorAll('.tilt').forEach(el=>{
+    el.addEventListener('mousemove',e=>{const r=el.getBoundingClientRect();
+      const rx=(((e.clientY-r.top)/r.height)-.5)*-5, ry=(((e.clientX-r.left)/r.width)-.5)*5;
+      el.style.transform=`perspective(1100px) rotateX(${rx}deg) rotateY(${ry}deg)`});
+    el.addEventListener('mouseleave',()=>el.style.transform='');
+  })}
+
+  // steps lottie (green → violet via CSS hue-rotate) + timeline fill on scroll
+  const stepsBox=document.getElementById('stepsLottie');
+  if(stepsBox && window.lottie){
+    try{lottie.loadAnimation({container:stepsBox,renderer:'svg',loop:true,autoplay:!reduce,path:'steps.json'});}catch(e){}
+  }
+  // scroll-scrubbed timeline: line fills with scroll, each step lights up when reached (like the service pages)
+  const tl=document.getElementById('timeline2');
+  if(tl){
+    const fill=tl.querySelector('.tl-fill'), tlSteps=[...tl.querySelectorAll('.tl-step')];
+    function tlLoop(){
+      const rect=tl.getBoundingClientRect(), vh=window.innerHeight;
+      let p=(0.7*vh - rect.top)/(0.1*vh + rect.height);
+      p=Math.min(1,Math.max(0,p));
+      if(reduce)p=1;
+      fill.style.transform=`scaleY(${p})`;
+      const fillPx=p*rect.height;
+      tlSteps.forEach(s=>s.classList.toggle('active', fillPx >= s.offsetTop+8));
+      requestAnimationFrame(tlLoop);
+    }
+    requestAnimationFrame(tlLoop);
+  }
+
+  // scroll-driven "unfold": screen starts laid back (60°) and rises upright (ported from ProductHeroUnfold)
+  (function(){
+    const stage=document.querySelector('.mock-stage'), frame=document.getElementById('mock');
+    if(!stage||!frame)return;
+    const START=60, clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+    function loop(){
+      const rect=stage.getBoundingClientRect(), vh=window.innerHeight;
+      let p=clamp((vh*0.9-rect.top)/(vh*0.5),0,1); p=p*p*(3-2*p);
+      const rx=reduce?0:(1-p)*START, sc=0.9+p*0.1;
+      frame.style.transform=`rotateX(${rx}deg) scale(${sc})`;
+      frame.style.boxShadow=`0 ${Math.round(30+(1-p)*50)}px ${Math.round(70+(1-p)*50)}px rgba(0,0,0,${(0.5+(1-p)*0.25).toFixed(2)})`;
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+
+  // ===== interactive pricing carousel (ported from PricingCarousel) =====
+  const PLANS=[
+    {name:'חבילת Trio',price:'990',note:'לחודש · 3 תוכנות',desc:'בוחרים 3 תוכנות מהסוויטה במחיר אחד, חיסכון של כ-27% מול רכישה בנפרד.',target:'מי שרוצה כמה כלים',items:['3 תוכנות לבחירתכם','workspace מאוחד','חיוב אחד','מכסות הוואטסאפ מצטברות','חיסכון ~27%'],benefits:['חודש ראשון חינם','חיסכון מיידי','ניהול אחד']},
+    {name:'חבילת Suite-5',price:'1,490',note:'לחודש · 5 תוכנות',popular:true,desc:'חמש תוכנות לבחירתכם, חיסכון של כ-34% מול רכישה בנפרד.',target:'עסק שרוצה עומק',items:['5 תוכנות לבחירתכם','workspace מאוחד','חיוב אחד','מכסות הוואטסאפ מצטברות','חיסכון ~34%'],benefits:['חודש ראשון חינם','הכי משתלם למרובי-כלים']},
+    {name:'סוויטה מלאה',price:'2,490',note:'לחודש · כל התוכנות',desc:'כל משפחת המוצרים של HELIX תחת מנוי אחד, למי שרוצה את הכל.',target:'ארגון שרוצה את כל הערכה',items:['כל התוכנות הפעילות','workspace מאוחד','עדיפות בתמיכה','מכסות וואטסאפ מוגדלות','חיסכון 40%+'],benefits:['חודש ראשון חינם','הערך המקסימלי'],footnote:'* חיוב שנתי, חודשיים חינם על כל מסלול.'},
+  ];
+  const pcWrap=document.getElementById('pcWrap');
+  if(pcWrap){
+    const pcSide=document.getElementById('pcSide'), pcTabs=document.getElementById('pcTabs'), pcDots=document.getElementById('pcDots');
+    const n=PLANS.length; let cur=1, auto;
+    const posOf=(i)=>{const d=((i-cur)%n+n)%n; return d===0?'center':d===1?'left':d===n-1?'right':d===2?'far-left':d===n-2?'far-right':'hidden-card'};
+    // build static shells once
+    pcSide.innerHTML=PLANS.map((p,i)=>`<button class="pc-side-item" data-i="${i}">${p.name}<span class="pc-side-tag">${p.price} ₪</span></button>`).join('');
+    pcTabs.innerHTML=PLANS.map((p,i)=>`<button class="pc-tab" data-i="${i}">${p.name}</button>`).join('');
+    pcDots.innerHTML=PLANS.map((p,i)=>`<button class="pc-dot" data-i="${i}" aria-label="${p.name}"></button>`).join('');
+    pcWrap.innerHTML=PLANS.map((p)=>`
+      <div class="pc-card${p.popular?' is-popular':''}">
+        ${p.popular?'<span class="pc-popular">הכי פופולרי</span>':''}
+        <div class="pc-header"><span class="pc-name">${p.name}</span>
+          <div><div class="pc-price">₪${p.price}</div><div class="pc-price-note">${p.note}</div></div></div>
+        <p class="pc-desc">${p.desc}</p>
+        <div class="pc-target">${p.target}</div>
+        <ul class="pc-items">${p.items.map(it=>`<li><span class="pc-check">✓</span>${it}</li>`).join('')}</ul>
+        <div class="pc-benefits">${p.benefits.map(b=>`<span class="pc-benefit">${b}</span>`).join('')}</div>
+        <button class="pc-cta">התחלה חינם</button>
+        ${p.footnote?`<p class="pc-footnote">${p.footnote}</p>`:''}
+      </div>`).join('');
+    const cards=[...pcWrap.children], sides=[...pcSide.children], tabs=[...pcTabs.children], dots=[...pcDots.children];
+    function render(){
+      cards.forEach((c,i)=>{c.className=`pc-card ${posOf(i)}${PLANS[i].popular?' is-popular':''}`});
+      sides.forEach((s,i)=>s.classList.toggle('active',i===cur));
+      tabs.forEach((s,i)=>s.classList.toggle('active',i===cur));
+      dots.forEach((s,i)=>s.classList.toggle('active',i===cur));
+    }
+    const go=(d)=>{cur=(cur+d+n)%n;render();stop()};
+    const goTo=(i)=>{cur=i;render();stop()};
+    const stop=()=>{if(auto)clearInterval(auto);auto=null};
+    const start=()=>{if(!reduce)auto=setInterval(()=>{cur=(cur+1)%n;render()},5500)};
+    [...sides,...tabs,...dots].forEach(el=>el.addEventListener('click',()=>goTo(+el.dataset.i)));
+    document.getElementById('pcPrev').addEventListener('click',()=>go(-1));
+    document.getElementById('pcNext').addEventListener('click',()=>go(1));
+    pcWrap.addEventListener('click',(e)=>{
+      const cta=e.target.closest('.pc-cta');
+      if(cta){if(typeof confetti==='function'&&!reduce){const r=cta.getBoundingClientRect();
+        confetti({particleCount:90,spread:75,origin:{x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight},colors:['#38BDF8','#7DD3FC','#0EA5E9','#E6EDF3'],disableForReducedMotion:true})}return}
+      if(window.innerWidth<=768)return;
+      const r=pcWrap.getBoundingClientRect(); go(e.clientX-r.left < r.width/2 ? 1 : -1);
+    });
+    let tsx=0; pcWrap.addEventListener('touchstart',e=>tsx=e.touches[0].clientX,{passive:true});
+    pcWrap.addEventListener('touchend',e=>{const d=tsx-e.changedTouches[0].clientX;if(Math.abs(d)>25)go(d>0?1:-1)});
+    window.addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(-1);if(e.key==='ArrowLeft')go(1)});
+    render(); start();
+  }
+
+  // packages fab: appears after scroll, scrolls to the plans section
+  const fabPkg=document.getElementById('fabPkg');
+  if(fabPkg){
+    fabPkg.addEventListener('click',()=>document.getElementById('pricing')?.scrollIntoView({behavior:'smooth'}));
+    const onScroll=()=>fabPkg.classList.toggle('show', window.scrollY>400);
+    window.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+  }
+  // referral pill: appears occasionally (after 9s), dismissible, remembers dismissal for the session
+  const refPill=document.getElementById('refPill'), refClose=document.getElementById('refClose');
+  if(refPill && !sessionStorage.getItem('refDismissed')){
+    setTimeout(()=>refPill.classList.add('show'), 9000);
+    refClose?.addEventListener('click',()=>{refPill.classList.remove('show');try{sessionStorage.setItem('refDismissed','1')}catch(e){}});
+  }
+
+  // rocket lottie inside every lead form (green base → violet via CSS hue-rotate)
+  document.querySelectorAll('.rocket-lottie').forEach(box=>{
+    if(window.lottie){try{lottie.loadAnimation({container:box,renderer:'svg',loop:true,autoplay:!reduce,path:'rocket-mail.json'});}catch(e){}}
+  });
+
+  // business-email validation (block free providers) + WhatsApp prefill helpers
+  const FREE_EMAIL=/@(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|walla|nana|proton|protonmail|gmx|mail|zoho|yandex)\.[a-z.]+$/i;
+  function validBiz(form){
+    const email=form.querySelector('input[type="email"]'), err=form.querySelector('.ff-error');
+    if(email && FREE_EMAIL.test(email.value.trim())){if(err)err.classList.add('show');email.focus();return false;}
+    if(err)err.classList.remove('show');return true;
+  }
+  const WA='https://wa.me/972544468883', PRODUCT='HELIX SDR';
+  const waLink=(name)=>`${WA}?text=${encodeURIComponent(`שלום, מעניין אותי ${PRODUCT}${name?`. שמי ${name}`:''}`)}`;
+  // default prefilled text on all static WhatsApp links (fab, offer bar, final CTA)
+  document.querySelectorAll('a[href^="https://wa.me/972544468883"]').forEach(a=>{ if(a.href.indexOf('?text=')===-1) a.href=waLink(''); });
+  // lead-form WhatsApp buttons: inject the visitor's name from their own form on click
+  document.querySelectorAll('.lead-wa').forEach(a=>a.addEventListener('click',()=>{
+    const card=a.closest('.lead-card'), nm=card&&card.querySelector('input[id$="-name"]');
+    a.href=waLink(nm&&nm.value.trim());
+  }));
+
+  // lead forms inside cards: validate business email → success state
+  document.querySelectorAll('.lead-card form.lead-form').forEach(f=>{
+    f.addEventListener('submit',e=>{
+      e.preventDefault();
+      if(!f.checkValidity()){f.reportValidity();return}
+      if(!validBiz(f))return;
+      const card=f.closest('.lead-card'), succ=card&&card.querySelector('.lead-success');
+      f.style.display='none';
+      if(succ){succ.hidden=false;
+        if(typeof confetti==='function'&&!reduce){const r=succ.getBoundingClientRect();
+          confetti({particleCount:70,spread:70,origin:{x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight},colors:['#38BDF8','#7DD3FC','#0EA5E9','#E6EDF3'],disableForReducedMotion:true})}}
+    });
+  });
+
+  // timed popup (every page, after 60s; 7-day cooldown) → opens WhatsApp with name+product+interest
+  const xp=document.getElementById('xpOverlay');
+  if(xp){
+    const KEY='helix-popup-dismissed-at', COOL=7*24*3600*1000, DELAY=60000;
+    const close=()=>{xp.classList.remove('show');try{localStorage.setItem(KEY,String(Date.now()))}catch(e){}};
+    let dismissed=false; try{const at=Number(localStorage.getItem(KEY)||0); dismissed=at>0 && (Date.now()-at)<COOL;}catch(e){}
+    if(!dismissed) setTimeout(()=>xp.classList.add('show'), DELAY);
+    document.getElementById('xpClose').addEventListener('click',close);
+    xp.addEventListener('click',e=>{if(e.target===xp)close()});
+    window.addEventListener('keydown',e=>{if(e.key==='Escape'&&xp.classList.contains('show'))close()});
+    const xpLead=document.getElementById('xpLead');
+    xpLead.addEventListener('submit',e=>{
+      e.preventDefault();
+      if(!xpLead.checkValidity()){xpLead.reportValidity();return}
+      if(!validBiz(xpLead))return;
+      const name=document.getElementById('xp-name').value.trim(), phone=document.getElementById('xp-phone').value.trim(), interest=document.getElementById('xp-interest').value;
+      const msg=`שלום, השארתי פרטים באתר\nשם: ${name}\nטלפון: ${phone}\nמעניין אותי: ${interest||PRODUCT}`;
+      window.open(`${WA}?text=${encodeURIComponent(msg)}`,'_blank');
+      document.getElementById('xpForm').hidden=true; document.getElementById('xpSuccess').hidden=false;
+      setTimeout(close,2200);
+    });
+  }
+
+  // magnetic primary CTA
+  if(!reduce){document.querySelectorAll('.btn-primary').forEach(btn=>{
+    btn.addEventListener('mousemove',e=>{const r=btn.getBoundingClientRect();
+      btn.style.transform=`translate(${(e.clientX-r.left-r.width/2)*.15}px,${(e.clientY-r.top-r.height/2)*.25-2}px)`});
+    btn.addEventListener('mouseleave',()=>btn.style.transform='');
+  })}
+</script>
+</body>
+</html>
